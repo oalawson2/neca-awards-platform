@@ -1,4 +1,4 @@
-import type { SessionUser } from "@/types/auth";
+import type { SessionUser } from "../../types/auth";
 
 /**
  * Placeholder session lookup.

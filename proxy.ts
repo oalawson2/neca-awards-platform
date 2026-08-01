@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getCurrentUser, portalPathForRole } from "@/lib/auth/session";
+import { getCurrentUser, portalPathForRole } from "./lib/auth/session";
 
 /**
  * Role-based routing shell for the three portals.

@@ -7,6 +7,14 @@ const nextConfig: NextConfig = {
   // production or rely on `next start`. See .cpanel.yml for how the
   // build output is assembled into the deploy path.
   output: "standalone",
+
+  experimental: {
+    // Defaults to (CPU count - 1) worker processes for the "Collecting
+    // page data" build step. The shared hosting box this deploys to can't
+    // fork that many workers — it fails with "ThreadPoolBuildError...
+    // Resource temporarily unavailable". Pin it to 1.
+    cpus: 1,
+  },
 };
 
 export default nextConfig;

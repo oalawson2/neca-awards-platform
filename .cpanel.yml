@@ -9,13 +9,19 @@
 # DEPLOYPATH and NODEVENV_ACTIVATE below are the Node.js Selector's
 # "Application root" and "Enter to the virtual environment" values for the
 # neca-app Node.js App in cPanel.
+#
+# RAYON_NUM_THREADS=1 caps the thread pool Next.js's native Rust tooling
+# (SWC, lightningcss) spins up during the build. This shared host can't
+# fork enough threads for the default pool size and fails partway through
+# compiling with "Resource temporarily unavailable". See next.config.ts's
+# experimental.cpus for the equivalent cap on the Node-side worker pool.
 deployment:
   tasks:
     - export DEPLOYPATH=/home/necasmwo/neca-app
     - export NODEVENV_ACTIVATE=/home/necasmwo/nodevenv/neca-app/24/bin/activate
     - source $NODEVENV_ACTIVATE
     - npm ci
-    - npm run build
+    - RAYON_NUM_THREADS=1 npm run build
     - /bin/mkdir -p $DEPLOYPATH
     - /bin/cp -R .next/standalone/. $DEPLOYPATH/
     - /bin/mkdir -p $DEPLOYPATH/.next

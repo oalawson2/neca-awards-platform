@@ -1,0 +1,31 @@
+---
+# cPanel Git Version Control deploy pipeline.
+#
+# Triggered when you click "Deploy HEAD Commit" (or push, if auto-deploy is
+# enabled) on this repo in cPanel. Tasks run with the working directory set
+# to the repo checkout (cPanel's default clone path is normally
+# ~/repositories/<repo-name>).
+#
+# Two things below need editing once the cPanel side exists — search for
+# "TODO" — because their real values only exist after you create the
+# "Setup Node.js App" application in cPanel:
+#   1. DEPLOYPATH   — the Node app's "Application root", shown on the
+#                      Node.js Selector page.
+#   2. NODEVENV_ACTIVATE — the app's virtualenv activate script, also
+#                      shown on that page, so `npm`/`node` resolve to the
+#                      Node version you picked for the app (shared hosting
+#                      has no reliable global `node` otherwise).
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/USERNAME/APP_ROOT # TODO: Node.js Selector -> Application root
+    - export NODEVENV_ACTIVATE=/home/USERNAME/nodevenv/APP_ROOT/20/bin/activate # TODO: Node.js Selector -> "Enter to the virtual environment" command
+    - source $NODEVENV_ACTIVATE
+    - npm ci
+    - npm run build
+    - /bin/mkdir -p $DEPLOYPATH
+    - /bin/cp -R .next/standalone/. $DEPLOYPATH/
+    - /bin/mkdir -p $DEPLOYPATH/.next
+    - /bin/cp -R .next/static $DEPLOYPATH/.next/static
+    - /bin/cp -R public $DEPLOYPATH/public
+    - /bin/mkdir -p $DEPLOYPATH/tmp
+    - /bin/touch $DEPLOYPATH/tmp/restart.txt

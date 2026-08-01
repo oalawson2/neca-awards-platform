@@ -87,8 +87,6 @@ Open http://localhost:3000.
 
 Deployment is via cPanel's Git Version Control feature reading
 `.cpanel.yml` at the repo root, which builds the app (`output: "standalone"`
-in `next.config.ts`) and copies the build output into the Node.js app's
-application root. See `.cpanel.yml` for the two placeholders
-(`DEPLOYPATH`, `NODEVENV_ACTIVATE`) that need real values from cPanel's
-Node.js Selector once that app exists, and `deploy/ssh/README.md` for the
-SSH deploy key setup.
+in `next.config.ts`) and copies the build output into the `neca-app`
+Node.js app's application root (`/home/necasmwo/neca-app`). See
+`deploy/ssh/README.md` for the SSH deploy key setup.

@@ -85,16 +85,34 @@ Open http://localhost:3000.
 
 ## Deployment
 
-Deployment is via cPanel's Git Version Control feature, whose Repository
-Path is set to the `neca-app` Node.js App's own application root
-(`/home/necasmwo/neca-app`) — the repo is built in place, not copied
-somewhere else afterward. `.cpanel.yml` runs the build (`output:
-"standalone"` in `next.config.ts`) and then stages `public/` and
-`.next/static/` into `.next/standalone/`, since standalone output doesn't
-include those by default.
+cPanel's own Git Version Control deploy feature couldn't be used on this
+host, so deploys are manual: SSH into the `neca-app` Node.js App's
+application root (`/home/necasmwo/neca-app`, already tracking this repo)
+and run:
 
-**cPanel's Node.js Selector "Application startup file" must be set to
-`.next/standalone/server.js`** (relative to the application root) — that's
+```bash
+./deploy.sh
+```
+
+This pulls the latest commit, activates the Node virtual environment,
+installs dependencies, builds (with the single-thread workaround this host
+requires), and stages `public/` and `.next/static/` into
+`.next/standalone/` — Next's `output: "standalone"` build doesn't include
+either by default, and missing this step is what used to produce
+unhelpful 500s on static assets that never showed up in the app's own
+logs. The script stops immediately on any failure (`set -e`) rather than
+leaving a partial deploy that looks like it succeeded.
+
+**After every run of `deploy.sh`, go to cPanel → Setup Node.js App →
+neca-app and click Stop, then Start** (not just Restart — Restart alone
+has not reliably picked up changes on this host). The script prints this
+reminder at the end, but it can't do this part itself since it only
+exists in the cPanel UI.
+
+cPanel's Node.js Selector "Application startup file" is
+`.next/standalone/server.js` (relative to the application root) — that's
 the actual server; `next start` is not used in production.
 
-See `deploy/ssh/README.md` for the SSH deploy key setup.
+`.cpanel.yml` documents the equivalent steps for cPanel's Git Version
+Control feature but isn't the active deploy path on this host — `deploy.sh`
+is. See `deploy/ssh/README.md` for the SSH deploy key setup.

@@ -23,7 +23,12 @@ echo "==> [1/5] Pulling latest from git..."
 git pull
 
 echo "==> [2/5] Activating Node virtual environment..."
+# cPanel's own activate script references CL_VIRTUAL_ENV without a default
+# before assigning it, which is fatal under `set -u`. Disable nounset just
+# for the source, then restore it — don't drop -u for the whole script.
+set +u
 source "$NODEVENV_ACTIVATE"
+set -u
 
 echo "==> [3/5] Installing dependencies..."
 npm install

@@ -12,12 +12,14 @@ export function InterviewBooking({
   sectorName,
   slots,
   bookedSlot,
+  interviewRequested,
 }: {
   applicationId: string;
   organizationName: string;
   sectorName: string;
   slots: InterviewAvailabilitySlot[];
   bookedSlot: InterviewAvailabilitySlot | null;
+  interviewRequested: boolean;
 }) {
   const dates = useMemo(() => Array.from(new Set(slots.map((s) => s.date))).sort(), [slots]);
   const [selectedDate, setSelectedDate] = useState(dates[0]);
@@ -62,7 +64,9 @@ export function InterviewBooking({
 
       {dates.length === 0 ? (
         <div className="text-sm text-text-muted border border-border rounded-2xl p-6">
-          No interview slots have been published by your sector&rsquo;s jurors yet. Check back soon.
+          {interviewRequested
+            ? "Your interview has been requested, but no slots are open yet. Check back soon."
+            : "Your sector's jury panel hasn't requested an interview with you yet. You'll receive an email once one is available to book."}
         </div>
       ) : (
         <div className="flex flex-col sm:flex-row gap-8">

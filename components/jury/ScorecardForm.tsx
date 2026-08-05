@@ -30,6 +30,7 @@ export function ScorecardForm({
   );
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [outstandingDocuments, setOutstandingDocuments] = useState<string[] | null>(null);
 
   const criterion = criteria[sectionIndex];
   const criterionScore = criteriaScores[sectionIndex];
@@ -58,6 +59,7 @@ export function ScorecardForm({
 
   function saveAndContinue() {
     setError(null);
+    setOutstandingDocuments(null);
     const allScoredInSection = criterionScore.items.every((i) => i.value !== null);
     if (!allScoredInSection) {
       setError("Score every item in this section before continuing.");
@@ -70,7 +72,8 @@ export function ScorecardForm({
     startTransition(async () => {
       const result = await submitScorecard(applicationId, jurorId, jurorName);
       if (!result.success) {
-        setError(result.error ?? "Could not submit scorecard.");
+        setError(result.outstandingDocuments?.length ? "Outstanding document reviews are blocking submission:" : result.error ?? "Could not submit scorecard.");
+        setOutstandingDocuments(result.outstandingDocuments ?? null);
         return;
       }
       router.push("/jury");
@@ -95,7 +98,18 @@ export function ScorecardForm({
         </h1>
         <p className="text-[13px] text-text-muted mb-6.5">Score each item 0–5. Your score is confidential.</p>
 
-        {error && <div className="text-sm text-error mb-4">{error}</div>}
+        {error && (
+          <div className="text-sm text-error mb-4">
+            {error}
+            {outstandingDocuments && outstandingDocuments.length > 0 && (
+              <ul className="list-disc pl-5 mt-1.5">
+                {outstandingDocuments.map((name) => (
+                  <li key={name}>{name} — needs certify or mark not compliant</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
         <div className="flex flex-col gap-6">
           {criterionScore.items.map((item) => (

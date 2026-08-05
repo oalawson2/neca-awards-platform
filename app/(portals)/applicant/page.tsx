@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getApplicationForApplicantUser, getScoreSummary } from "@/lib/data/applications";
 import { getDocuments } from "@/lib/data/documents";
+import { getInterviewRequest } from "@/lib/data/interviews";
 import { Card } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/Badge";
 import { LinkButton } from "@/components/ui/Button";
@@ -24,6 +25,7 @@ export default async function ApplicantDashboardPage() {
   const documents = await getDocuments(application.id);
   const uploadedCount = documents.filter((d) => d.status === "uploaded").length;
   const scoreSummary = application.status === "released" ? await getScoreSummary(application.id) : null;
+  const interviewRequest = await getInterviewRequest(application.id);
 
   const nextStepHref =
     !application.organization.name ? "/applicant/profile" :
@@ -102,7 +104,7 @@ export default async function ApplicantDashboardPage() {
         )}
       </Card>
 
-      {(application.status === "scoring" || application.status === "scored" || application.status === "released") && (
+      {interviewRequest && (
         <Card className="mt-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>

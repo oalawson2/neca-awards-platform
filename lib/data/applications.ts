@@ -1,5 +1,5 @@
 import { store, applicantOrgLink } from "@/lib/mock/store";
-import { getCertificationBonus } from "@/lib/data/documents";
+import { getJurorCertificationBonus } from "@/lib/data/documents";
 import type { Application, Organization, ScoreSummary } from "@/types/domain";
 
 export interface ApplicationWithOrg extends Application {
@@ -57,7 +57,9 @@ export async function getApplicationsForJuror(jurorId: string) {
 /**
  * Score summary honoring the "total ÷ jurors assigned (not just those who
  * scored)" rule, and the incomplete-scoring state when any assigned juror
- * hasn't submitted yet.
+ * hasn't submitted yet. Each juror's totalScore already includes their own
+ * document-certification bonus (baked in at submit time — see
+ * lib/actions/scoring.ts), so no separate bonus add-on is needed here.
  */
 export async function getScoreSummary(applicationId: string): Promise<ScoreSummary> {
   const app = store.applications.find((a) => a.id === applicationId);
@@ -69,14 +71,24 @@ export async function getScoreSummary(applicationId: string): Promise<ScoreSumma
   );
   const jurorsScored = submittedScorecards.length;
   const isComplete = jurorsAssigned > 0 && jurorsScored === jurorsAssigned;
-  const bonus = isComplete ? await getCertificationBonus(applicationId) : 0;
   const averageScore = isComplete
-    ? Math.round(
-        (submittedScorecards.reduce((sum, s) => sum + (s.totalScore ?? 0), 0) / jurorsAssigned + bonus) * 10
-      ) / 10
+    ? Math.round((submittedScorecards.reduce((sum, s) => sum + (s.totalScore ?? 0), 0) / jurorsAssigned) * 10) / 10
     : null;
 
   return { jurorsAssigned, jurorsScored, isComplete, averageScore };
+}
+
+/**
+ * Average document-certification bonus baked into submitted jurors'
+ * totals, surfaced separately so criterion-breakdown displays (which show
+ * pure rubric scores) plus this line actually add up to the final score
+ * shown alongside them.
+ */
+export async function getAverageCertificationBonus(applicationId: string): Promise<number> {
+  const submitted = store.scorecards.filter((s) => s.applicationId === applicationId && s.status === "submitted");
+  if (submitted.length === 0) return 0;
+  const bonuses = await Promise.all(submitted.map((s) => getJurorCertificationBonus(applicationId, s.jurorId)));
+  return Math.round((bonuses.reduce((a, b) => a + b, 0) / submitted.length) * 10) / 10;
 }
 
 export interface CriterionBreakdownRow {

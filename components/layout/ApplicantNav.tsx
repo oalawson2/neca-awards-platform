@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
+import { signOut } from "@/lib/auth/actions";
 
 const STEPS = [
   { href: "/applicant/profile", label: "Profile Setup" },
@@ -42,9 +43,14 @@ export function ApplicantNav({ organizationName }: { organizationName: string })
             })}
           </nav>
         </div>
-        <div className="flex items-center gap-2.5 min-w-0">
+        <div className="flex items-center gap-3.5 min-w-0">
           <span className="hidden sm:inline text-[13px] text-[#5B5F6B] truncate max-w-[220px]">{organizationName}</span>
           <Avatar name={organizationName || "A"} />
+          <form action={signOut}>
+            <button type="submit" className="text-[13px] text-[#5B5F6B] hover:text-navy">
+              Sign out
+            </button>
+          </form>
         </div>
       </header>
 

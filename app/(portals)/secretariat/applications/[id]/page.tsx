@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { cn, formatDate } from "@/lib/utils";
 import { getApplication, getCriterionBreakdown, getScoreSummary } from "@/lib/data/applications";
 import { getQuestionnaireSections, getAnswers } from "@/lib/data/questionnaire";
-import { getDocuments } from "@/lib/data/documents";
+import { getDocuments, getDocumentReviewSummary } from "@/lib/data/documents";
 import { getSectors } from "@/lib/data/sectors-criteria";
 import { getSettings } from "@/lib/data/settings";
 import { StatusBadge, Badge } from "@/components/ui/Badge";
@@ -29,13 +29,15 @@ export default async function ApplicationDetailPage({
   const application = await getApplication(id);
   if (!application) notFound();
 
-  const [sections, answers, documents, sectors, settings] = await Promise.all([
+  const [sections, answers, documents, documentReviewSummary, sectors, settings] = await Promise.all([
     getQuestionnaireSections(),
     getAnswers(id),
     getDocuments(id),
+    getDocumentReviewSummary(id),
     getSectors(),
     getSettings(),
   ]);
+  const reviewSummaryByDoc = Object.fromEntries(documentReviewSummary.map((r) => [r.documentId, r]));
   const answerMap = Object.fromEntries(answers.map((a) => [a.questionId, a.value]));
   const sectorName = sectors.find((s) => s.id === application.sectorId)?.name;
 
@@ -93,16 +95,29 @@ export default async function ApplicationDetailPage({
 
         {tab === "documents" && (
           <div className="border border-border rounded-2xl overflow-hidden">
-            {documents.map((doc) => (
-              <div key={doc.id} className="flex justify-between items-center px-5 py-3.5 border-b last:border-b-0 border-border text-sm">
-                <div>
-                  <div className="font-semibold">{doc.name}</div>
-                  {doc.certifiedByJurorId && <div className="text-xs text-success mt-0.5">✓ Certified compliant by jury</div>}
-                  {doc.flaggedIssue && <div className="text-xs text-error mt-0.5">⚠ {doc.flaggedIssue}</div>}
+            {documents.map((doc) => {
+              const review = reviewSummaryByDoc[doc.id];
+              return (
+                <div key={doc.id} className="flex justify-between items-center px-5 py-3.5 border-b last:border-b-0 border-border text-sm">
+                  <div>
+                    <div className="font-semibold">{doc.name}</div>
+                    {doc.status === "uploaded" && review && (
+                      <div className="text-xs text-text-muted mt-0.5">
+                        {review.certifiedByCount > 0 && (
+                          <span className="text-success">✓ Certified by {review.certifiedByCount} of {review.totalJurorsAssigned} jurors</span>
+                        )}
+                        {review.certifiedByCount > 0 && review.rejectedByCount > 0 && " · "}
+                        {review.rejectedByCount > 0 && (
+                          <span className="text-error">⚠ Marked not compliant by {review.rejectedByCount} of {review.totalJurorsAssigned} jurors</span>
+                        )}
+                        {review.certifiedByCount === 0 && review.rejectedByCount === 0 && "Not yet reviewed by any juror"}
+                      </div>
+                    )}
+                  </div>
+                  {doc.status === "uploaded" ? <Badge tone="success">UPLOADED</Badge> : <Badge tone="error">MISSING</Badge>}
                 </div>
-                {doc.status === "uploaded" ? <Badge tone="success">UPLOADED</Badge> : <Badge tone="error">MISSING</Badge>}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 

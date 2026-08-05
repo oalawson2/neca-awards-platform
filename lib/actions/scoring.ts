@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { store, scoreCriteria } from "@/lib/mock/store";
 import { logAction } from "@/lib/data/audit";
+import { getOutstandingDocuments, getJurorCertificationBonus } from "@/lib/data/documents";
 
 export async function saveScoreItem(
   applicationId: string,
@@ -25,16 +26,33 @@ export async function saveScoreItem(
   return { success: true };
 }
 
-export async function submitScorecard(applicationId: string, jurorId: string, jurorName: string) {
+export interface SubmitScorecardResult {
+  success: boolean;
+  error?: string;
+  outstandingDocuments?: string[];
+}
+
+export async function submitScorecard(applicationId: string, jurorId: string, jurorName: string): Promise<SubmitScorecardResult> {
   const scorecard = store.scorecards.find((s) => s.applicationId === applicationId && s.jurorId === jurorId);
   if (!scorecard) return { success: false, error: "Scorecard not found." };
 
   const allScored = scorecard.criteriaScores.every((c) => c.items.every((i) => i.value !== null));
   if (!allScored) return { success: false, error: "Score every item before submitting." };
 
+  const outstanding = await getOutstandingDocuments(applicationId, jurorId);
+  if (outstanding.length > 0) {
+    const names = outstanding.map((d) => d.name);
+    return {
+      success: false,
+      error: `Certify or mark not compliant every uploaded document before submitting. Outstanding: ${names.join(", ")}`,
+      outstandingDocuments: names,
+    };
+  }
+
+  const bonus = await getJurorCertificationBonus(applicationId, jurorId);
   scorecard.status = "submitted";
   scorecard.submittedAt = new Date().toISOString();
-  scorecard.totalScore = scoreCriteria(scorecard.criteriaScores);
+  scorecard.totalScore = Math.round((scoreCriteria(scorecard.criteriaScores) + bonus) * 10) / 10;
 
   const app = store.applications.find((a) => a.id === applicationId);
   const orgName = app ? store.organizations.find((o) => o.id === app.organizationId)?.name : undefined;

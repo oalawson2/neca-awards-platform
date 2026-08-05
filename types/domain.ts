@@ -70,10 +70,23 @@ export interface RequiredDocument {
   requiredBecause: string;
   status: DocumentStatus;
   fileName?: string;
-  /** Jury-side certification (task: certifying a document applies a predetermined score bonus). */
-  certifiedByJurorId?: string | null;
-  certifiedAt?: string | null;
-  flaggedIssue?: string | null;
+}
+
+export type DocumentReviewStatus = "certified" | "rejected";
+
+/**
+ * A single juror's compliance review of a single document. Scoped per
+ * juror (not shared) so it lines up with blind scoring — one juror's
+ * compliance call on a document doesn't leak to another juror, and each
+ * juror's own certification bonus only reflects documents *they*
+ * personally certified.
+ */
+export interface DocumentReview {
+  documentId: string;
+  jurorId: string;
+  status: DocumentReviewStatus;
+  reviewedAt: string;
+  note?: string;
 }
 
 export interface Application {
@@ -132,6 +145,23 @@ export interface InterviewAvailabilitySlot {
   endTime: string;
   booked: boolean;
   bookedByApplicationId?: string | null;
+}
+
+/**
+ * Created when an assigned juror finishes document review for one
+ * applicant and requests an interview. This — not any general
+ * application-status change — is what unlocks booking for the applicant.
+ * The *Sent timestamps are mock placeholders for real email sends (no
+ * email provider is wired up yet); see lib/actions/interviews.ts.
+ */
+export interface InterviewRequest {
+  id: string;
+  applicationId: string;
+  requestedByJurorId: string;
+  requestedAt: string;
+  initialEmailSentAt: string | null;
+  lastBookingReminderAt: string | null;
+  lastAttendanceReminderAt: string | null;
 }
 
 export type AIReportStatus = "pending_approval" | "approved" | "sent_back";

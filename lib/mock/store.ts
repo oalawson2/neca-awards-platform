@@ -3,7 +3,9 @@ import type {
   Application,
   AuditLogEntry,
   Criterion,
+  DocumentReview,
   InterviewAvailabilitySlot,
+  InterviewRequest,
   JurorAssignment,
   JurorScorecard,
   Organization,
@@ -40,9 +42,11 @@ interface Store {
   questionnaireAnswers: QuestionnaireAnswer[]; // keyed by applicationId via composite below
   answersByApplication: Record<string, QuestionnaireAnswer[]>;
   documents: RequiredDocument[];
+  documentReviews: DocumentReview[];
   jurorAssignments: JurorAssignment[];
   scorecards: JurorScorecard[];
   availability: InterviewAvailabilitySlot[];
+  interviewRequests: InterviewRequest[];
   aiReports: AIReport[];
   auditLog: AuditLogEntry[];
   users: PlatformUser[];
@@ -148,9 +152,6 @@ function makeDocs(applicationId: string, uploadedCount: number): RequiredDocumen
     requiredBecause: t.requiredBecause,
     status: i < uploadedCount ? "uploaded" : "missing",
     fileName: i < uploadedCount ? `${t.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.pdf` : undefined,
-    certifiedByJurorId: null,
-    certifiedAt: null,
-    flaggedIssue: null,
   }));
 }
 
@@ -265,13 +266,18 @@ function seed(): Store {
     ...makeDocs("app-horizon", 5),
     ...makeDocs("app-nimbus", 5),
   ];
-  // Certify a couple of documents on the released applications, for demo purposes.
-  documents.find((d) => d.applicationId === "app-delta" && d.name.startsWith("Certificate"))!.certifiedByJurorId = "juror-tunde";
-  documents.find((d) => d.applicationId === "app-delta" && d.name.startsWith("Certificate"))!.certifiedAt = nowIso(-10);
-  documents.find((d) => d.applicationId === "app-aeros" && d.name.startsWith("Certificate"))!.certifiedByJurorId = "juror-ike";
-  documents.find((d) => d.applicationId === "app-aeros" && d.name.startsWith("Certificate"))!.certifiedAt = nowIso(-5);
-  documents.find((d) => d.applicationId === "app-aeros" && d.name.startsWith("Audited"))!.certifiedByJurorId = "juror-ike";
-  documents.find((d) => d.applicationId === "app-aeros" && d.name.startsWith("Audited"))!.certifiedAt = nowIso(-5);
+  // A few certified documents on already-scored applications, for demo
+  // purposes only. Note: those applications' seeded totalScore values were
+  // set directly (see makeScorecard calls below) and don't recompute to
+  // include these bonuses — they represent historical/frozen scores, not
+  // a live run through the current submit flow. Prime Textiles (below) is
+  // the one still not_started/in_progress, so it's the app to use to see
+  // the certify → bonus → submit mechanism run live end-to-end.
+  const documentReviews: DocumentReview[] = [
+    { documentId: documents.find((d) => d.applicationId === "app-delta" && d.name.startsWith("Certificate"))!.id, jurorId: "juror-tunde", status: "certified", reviewedAt: nowIso(-10) },
+    { documentId: documents.find((d) => d.applicationId === "app-aeros" && d.name.startsWith("Certificate"))!.id, jurorId: "juror-ike", status: "certified", reviewedAt: nowIso(-5) },
+    { documentId: documents.find((d) => d.applicationId === "app-aeros" && d.name.startsWith("Audited"))!.id, jurorId: "juror-ike", status: "certified", reviewedAt: nowIso(-5) },
+  ];
 
   const jurorAssignments: JurorAssignment[] = [
     { jurorId: "juror-ike", sectorId: "sector-manufacturing" },
@@ -445,9 +451,11 @@ function seed(): Store {
       ],
     },
     documents,
+    documentReviews,
     jurorAssignments,
     scorecards,
     availability,
+    interviewRequests: [],
     aiReports,
     auditLog,
     users,

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getApplicationForApplicantUser } from "@/lib/data/applications";
-import { getBookableSlotsForApplication, getBookedSlotForApplication } from "@/lib/data/interviews";
+import { getBookableSlotsForApplication, getBookedSlotForApplication, getInterviewRequest } from "@/lib/data/interviews";
 import { getSectors } from "@/lib/data/sectors-criteria";
 import { InterviewBooking } from "@/components/applicant/InterviewBooking";
 
@@ -12,10 +12,11 @@ export default async function ApplicantInterviewPage() {
   const application = await getApplicationForApplicantUser(user.id);
   if (!application) redirect("/login");
 
-  const [slots, bookedSlot, sectors] = await Promise.all([
+  const [slots, bookedSlot, sectors, interviewRequest] = await Promise.all([
     getBookableSlotsForApplication(application.id),
     getBookedSlotForApplication(application.id),
     getSectors(),
+    getInterviewRequest(application.id),
   ]);
   const sectorName = sectors.find((s) => s.id === application.sectorId)?.name ?? "your";
 
@@ -26,6 +27,7 @@ export default async function ApplicantInterviewPage() {
       sectorName={sectorName}
       slots={slots}
       bookedSlot={bookedSlot}
+      interviewRequested={!!interviewRequest}
     />
   );
 }

@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
+import { signOut } from "@/lib/auth/actions";
 
 export function JuryTabNav({ userName, defaultApplicationId }: { userName: string; defaultApplicationId?: string }) {
   const pathname = usePathname();
@@ -41,11 +42,23 @@ export function JuryTabNav({ userName, defaultApplicationId }: { userName: strin
             })}
           </nav>
         </div>
-        <div className="hidden sm:flex items-center gap-2.5">
+        <div className="hidden sm:flex items-center gap-3.5">
           <span className="text-[13px] text-[#5B5F6B]">{userName}</span>
           <Avatar name={userName} tone="jury" />
+          <form action={signOut}>
+            <button type="submit" className="text-[13px] text-[#5B5F6B] hover:text-jury">
+              Sign out
+            </button>
+          </form>
         </div>
-        <Avatar name={userName} tone="jury" className="sm:hidden" />
+        <div className="flex sm:hidden items-center gap-2.5">
+          <Avatar name={userName} tone="jury" />
+          <form action={signOut}>
+            <button type="submit" className="text-[12px] text-[#5B5F6B]">
+              Sign out
+            </button>
+          </form>
+        </div>
       </header>
 
       <nav className="md:hidden fixed bottom-0 inset-x-0 h-15 bg-white border-t border-border flex items-center justify-around z-40">

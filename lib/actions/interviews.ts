@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { store, generateId } from "@/lib/mock/store";
 import { logAction } from "@/lib/data/audit";
 import { getOutstandingDocuments } from "@/lib/data/documents";
+import { sendEmail } from "@/lib/email/send";
 
 export async function setAvailability(
   jurorId: string,
@@ -29,22 +30,24 @@ export async function bookInterviewSlot(applicationId: string, slotId: string, o
   return { success: true };
 }
 
+function orgForApplication(applicationId: string) {
+  const app = store.applications.find((a) => a.id === applicationId);
+  return app ? store.organizations.find((o) => o.id === app.organizationId) : undefined;
+}
+
 /**
  * Juror-initiated, per-applicant: called once a juror has certified or
  * rejected every uploaded document for this applicant (enforced here too,
  * not just hidden by the UI). Creates the InterviewRequest that unlocks
- * booking on the applicant side, and is the trigger point for the
- * "initial invite" email.
+ * booking on the applicant side, and sends the "initial invite" email.
  *
- * No email provider is wired up yet (no credentials exist) — this records
- * that the email *would* go out (initialEmailSentAt) and logs it, ready to
- * swap for a real send later without changing any caller. sendBookingReminder
- * and sendAttendanceReminder below are the matching trigger points for the
- * periodic follow-ups; none of these three functions are invoked on a
- * schedule anywhere yet, since this app has no background job runner —
- * once real email exists, something with a scheduler (a cron hitting a
- * route handler, a Supabase scheduled Edge Function, etc.) needs to call
- * them periodically.
+ * No email provider is wired up yet — sendEmail() (lib/email/send.ts) just
+ * logs what would have gone out. sendBookingReminder and
+ * sendAttendanceReminder below are the matching trigger points for the
+ * periodic follow-ups; they're invoked on a schedule by
+ * app/api/cron/interview-reminders, which needs an external trigger (e.g.
+ * a cPanel Cron Job) to actually hit that route periodically — see the
+ * README.
  */
 export async function requestInterview(applicationId: string, jurorId: string, jurorName: string) {
   const existing = store.interviewRequests.find((r) => r.applicationId === applicationId);
@@ -64,45 +67,81 @@ export async function requestInterview(applicationId: string, jurorId: string, j
     applicationId,
     requestedByJurorId: jurorId,
     requestedAt: now,
-    initialEmailSentAt: now, // mock send — see docstring above
+    initialEmailSentAt: now,
     lastBookingReminderAt: null,
     lastAttendanceReminderAt: null,
   });
 
-  const app = store.applications.find((a) => a.id === applicationId);
-  const orgName = app ? store.organizations.find((o) => o.id === app.organizationId)?.name : undefined;
-  logAction(jurorName, "Requested interview for", orgName ?? applicationId);
-  logAction("System", "Sent interview-invite email to", orgName ?? applicationId);
+  const org = orgForApplication(applicationId);
+  if (org) {
+    await sendEmail({
+      to: org.primaryContactEmail,
+      subject: "You're invited to book your NECA Excellence Awards panel interview",
+      template: "interview-invite",
+      context: { organizationName: org.name, applicationId },
+    });
+  }
+  logAction(jurorName, "Requested interview for", org?.name ?? applicationId);
 
   revalidatePath("/jury/documents/" + applicationId);
   revalidatePath("/applicant/interview");
   return { success: true };
 }
 
-/** Mock — sends (logs) a reminder to book, for a requested-but-not-yet-booked interview. Not called on a schedule yet; see requestInterview's docstring. */
+/**
+ * Sends (mock-sends, via sendEmail) a reminder to book, for a
+ * requested-but-not-yet-booked interview. Called by
+ * app/api/cron/interview-reminders on a schedule, not directly from the UI.
+ */
 export async function sendBookingReminder(applicationId: string) {
   const request = store.interviewRequests.find((r) => r.applicationId === applicationId);
   if (!request) return { success: false, error: "No interview has been requested for this applicant." };
   const alreadyBooked = store.availability.some((s) => s.bookedByApplicationId === applicationId);
   if (alreadyBooked) return { success: false, error: "This applicant has already booked — send an attendance reminder instead." };
 
+  const org = orgForApplication(applicationId);
+  if (org) {
+    await sendEmail({
+      to: org.primaryContactEmail,
+      subject: "Reminder: book your NECA Excellence Awards panel interview",
+      template: "interview-booking-reminder",
+      context: { organizationName: org.name, applicationId },
+    });
+  }
   request.lastBookingReminderAt = new Date().toISOString();
-  const app = store.applications.find((a) => a.id === applicationId);
-  const orgName = app ? store.organizations.find((o) => o.id === app.organizationId)?.name : undefined;
-  logAction("System", "Sent interview-booking reminder email to", orgName ?? applicationId);
+  logAction("System", "Sent interview-booking reminder email to", org?.name ?? applicationId);
   return { success: true };
 }
 
-/** Mock — sends (logs) a reminder ahead of a booked interview. Not called on a schedule yet; see requestInterview's docstring. */
+/**
+ * Sends (mock-sends, via sendEmail) a reminder ahead of a booked interview.
+ * Called by app/api/cron/interview-reminders on a schedule, not directly
+ * from the UI. Stops being a candidate once the booked slot's start time
+ * has passed — see getAttendanceReminderCandidates in lib/data/interviews.ts
+ * for why that's used as the "until attended" cutoff (there's no explicit
+ * attendance-tracking field in the domain model yet).
+ */
 export async function sendAttendanceReminder(applicationId: string) {
   const request = store.interviewRequests.find((r) => r.applicationId === applicationId);
   if (!request) return { success: false, error: "No interview has been requested for this applicant." };
   const bookedSlot = store.availability.find((s) => s.bookedByApplicationId === applicationId);
   if (!bookedSlot) return { success: false, error: "This applicant hasn't booked a slot yet — send a booking reminder instead." };
 
+  const org = orgForApplication(applicationId);
+  if (org) {
+    await sendEmail({
+      to: org.primaryContactEmail,
+      subject: "Reminder: your upcoming NECA Excellence Awards panel interview",
+      template: "interview-attendance-reminder",
+      context: {
+        organizationName: org.name,
+        applicationId,
+        date: bookedSlot.date,
+        startTime: bookedSlot.startTime,
+      },
+    });
+  }
   request.lastAttendanceReminderAt = new Date().toISOString();
-  const app = store.applications.find((a) => a.id === applicationId);
-  const orgName = app ? store.organizations.find((o) => o.id === app.organizationId)?.name : undefined;
-  logAction("System", "Sent interview-attendance reminder email to", orgName ?? applicationId);
+  logAction("System", "Sent interview-attendance reminder email to", org?.name ?? applicationId);
   return { success: true };
 }

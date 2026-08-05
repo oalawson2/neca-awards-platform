@@ -116,3 +116,46 @@ the actual server; `next start` is not used in production.
 `.cpanel.yml` documents the equivalent steps for cPanel's Git Version
 Control feature but isn't the active deploy path on this host — `deploy.sh`
 is. See `deploy/ssh/README.md` for the SSH deploy key setup.
+
+## Scheduled job: interview reminders
+
+`requestInterview()` (juror clicks "Request Interview") sends the initial
+invite immediately, synchronously, when clicked. The periodic follow-ups —
+"you haven't booked yet" and "your interview is coming up" — don't send
+themselves; something has to call `GET /api/cron/interview-reminders`
+periodically. This app has no background job runner of its own, so that
+"something" has to live outside it.
+
+**On this host, the simplest fit is cPanel's own Cron Jobs feature**
+(cPanel → Cron Jobs), rather than an external service like cron-job.org —
+no extra account, no outbound trust boundary, and it's already available
+on this hosting plan. Set up one cron job:
+
+- **Schedule:** once daily (any time works; the route itself throttles
+  each individual reminder to at most once per 24h, so more frequent runs
+  are harmless but redundant)
+- **Command:**
+  ```bash
+  curl -s -o /dev/null -H "x-cron-secret: $CRON_SECRET" "https://apply.necaexcellenceawards.com/api/cron/interview-reminders"
+  ```
+  Replace `$CRON_SECRET` with the actual value you set for `CRON_SECRET`
+  in the Node.js App's environment variables (cPanel → Setup Node.js App →
+  neca-app), and the host with the real deployed URL. cPanel's cron editor
+  doesn't expand shell env vars from the Node app, so paste the literal
+  secret value into the command — don't commit it anywhere.
+
+  Query-param form works too if a header is awkward in your cron tool:
+  `.../api/cron/interview-reminders?secret=<CRON_SECRET>`
+
+The route returns `401` if the secret is missing/wrong and `500` if
+`CRON_SECRET` isn't configured on the server at all — so a misconfigured
+cron job fails loudly in cPanel's cron mail/log rather than silently
+no-op'ing. On success it returns a small JSON summary (`bookingRemindersSent`,
+`attendanceRemindersSent`); check cPanel's cron job logs there if reminders
+seem to be missing.
+
+No real email is sent by this route yet — see `lib/email/send.ts`; every
+reminder currently just logs `[mock-email] would send ...` to the app's
+server log. Once `EMAIL_API_KEY`/`EMAIL_FROM_ADDRESS` are populated,
+swapping in a real provider is a contained change inside `sendEmail()` —
+no caller (including this route) needs to change.

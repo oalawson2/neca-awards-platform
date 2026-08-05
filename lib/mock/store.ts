@@ -464,20 +464,33 @@ function seed(): Store {
   };
 }
 
-const globalForStore = globalThis as unknown as { __necaMockStore?: Store; __necaApplicantOrgLink?: Record<string, string> };
+const globalForStore = globalThis as unknown as {
+  __necaMockStore?: Store;
+  __necaApplicantOrgLink?: Record<string, string>;
+  __necaNextId?: number;
+};
 
+/**
+ * Always cache on globalThis, in every environment. This isn't just a dev
+ * Fast-Refresh convenience: the standalone production build (see
+ * next.config.ts's output: "standalone", and how deploy.sh/README run
+ * `node .next/standalone/server.js`) traces each route/action into its own
+ * bundle, so without a process-wide singleton here, different bundles each
+ * call seed() independently and end up with silently divergent copies of
+ * "the database" within the same running server — e.g. a juror's
+ * certification could be invisible to the interview-reminders cron route
+ * even though both ran in the same Node process. globalThis is the only
+ * thing guaranteed to be shared across those bundles.
+ */
 export const store: Store = globalForStore.__necaMockStore ?? seed();
 export const applicantOrgLink: Record<string, string> =
   globalForStore.__necaApplicantOrgLink ??
   { "app-user-aeros": "org-aeros", "app-user-delta": "org-delta", "app-user-brightpath": "org-brightpath" };
 
-if (process.env.NODE_ENV !== "production") {
-  globalForStore.__necaMockStore = store;
-  globalForStore.__necaApplicantOrgLink = applicantOrgLink;
-}
+globalForStore.__necaMockStore = store;
+globalForStore.__necaApplicantOrgLink = applicantOrgLink;
 
-let nextId = 1000;
 export function generateId(prefix: string): string {
-  nextId += 1;
-  return `${prefix}-${nextId}`;
+  globalForStore.__necaNextId = (globalForStore.__necaNextId ?? 1000) + 1;
+  return `${prefix}-${globalForStore.__necaNextId}`;
 }

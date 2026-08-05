@@ -159,3 +159,60 @@ reminder currently just logs `[mock-email] would send ...` to the app's
 server log. Once `EMAIL_API_KEY`/`EMAIL_FROM_ADDRESS` are populated,
 swapping in a real provider is a contained change inside `sendEmail()` —
 no caller (including this route) needs to change.
+
+## Scheduled job: database backups
+
+The Supabase project is on the free tier, which doesn't include automatic
+backups. `backup.sh` (repo root, same style/discipline as `deploy.sh` —
+`set -euo pipefail`, stops loudly on any failure) runs `pg_dump` and
+writes a timestamped dump to `/home/necasmwo/neca-backups/` — a directory
+**outside the app's git repo entirely** (not just outside `public/`), so
+it's never touched by `deploy.sh`'s `git pull`, never at risk of being
+served as a static file, and survives even a from-scratch redeploy. It
+keeps the 10 most recent backups and deletes older ones automatically, so
+this can't quietly fill up disk over time.
+
+**One-time setup on the server**, before the first scheduled run:
+
+1. Confirm `pg_dump` is installed: `which pg_dump`. If it isn't, ask
+   hosting support to install the PostgreSQL client tools — shared hosting
+   doesn't always include them by default, and `backup.sh` will fail
+   loudly (not silently) with a clear message if it's missing.
+2. Create `/home/necasmwo/neca-app/.env.local` (if it doesn't already
+   exist) containing at least:
+   ```
+   SUPABASE_DB_URL=postgresql://postgres:<password>@db.<project-ref>.supabase.co:5432/postgres
+   ```
+   Use the **direct** connection string from Supabase (port `5432`), not
+   the pgbouncer/transaction-pooler one (port `6543`) — see
+   `.env.example`. cPanel Cron Jobs run with a minimal environment and
+   don't inherit the env vars configured in "Setup Node.js App", which is
+   why this needs its own file rather than reusing that UI.
+
+**cPanel Cron Job** (cPanel → Cron Jobs) — same reasoning as the interview
+reminders job above: cPanel's own Cron Jobs feature over an external
+service, since it's already available on this plan. Runs **daily**,
+starting immediately and continuing for the life of the project (not a
+phased/temporary thing):
+
+- **Schedule:** once daily, e.g. `0 2 * * *` (2:00 AM server time — any
+  time works, just pick one that isn't during a deploy)
+- **Command:**
+  ```bash
+  /bin/bash /home/necasmwo/neca-app/backup.sh >> /home/necasmwo/neca-backups/backup.log 2>&1
+  ```
+  Redirecting to a log file in the same outside-the-repo backups
+  directory means a failed run leaves a trail even if you don't check
+  cPanel's cron notification email that day. cPanel's Cron Jobs UI also
+  has its own "email" field if you'd rather get a notification per run —
+  leave it blank to only rely on the log file.
+
+If a backup ever fails, `backup.sh` exits non-zero and never leaves a
+partial/empty `.sql` file behind — check `backup.log` (or the cron
+notification email) for the specific error (missing `pg_dump`, missing
+`.env.local`, or a `pg_dump` connection error are the three it reports
+explicitly).
+
+**To restore from a backup**, see [`RESTORE.md`](./RESTORE.md) — plain-
+language, step by step, written for an emergency where you don't want to
+be figuring out `psql` syntax from scratch.

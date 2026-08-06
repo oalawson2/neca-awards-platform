@@ -1,18 +1,18 @@
 import { getStaffAndJurors } from "@/lib/data/users";
-import { getSectors } from "@/lib/data/sectors-criteria";
+import { store } from "@/lib/mock/store";
 import { resendInviteFormAction } from "@/lib/actions/users";
 import { Badge } from "@/components/ui/Badge";
 import { InviteUserModal } from "@/components/secretariat/InviteUserModal";
 
 export default async function UsersPage() {
-  const [users, sectors] = await Promise.all([getStaffAndJurors(), getSectors()]);
-  const sectorName = (id: string) => sectors.find((s) => s.id === id)?.name ?? id;
+  const users = await getStaffAndJurors();
+  const panelFor = (userId: string) => store.panels.find((p) => p.jurorIds.includes(userId))?.name ?? "—";
 
   return (
     <div className="flex flex-col h-full">
       <div className="h-17 border-b border-border flex items-center justify-between px-6 sm:px-7 flex-shrink-0">
         <h1 className="font-heading font-extrabold text-[19px] text-navy-dark">Users &amp; Roles</h1>
-        <InviteUserModal sectors={sectors} />
+        <InviteUserModal />
       </div>
 
       <div className="p-6 sm:p-7 overflow-y-auto flex-1">
@@ -20,7 +20,7 @@ export default async function UsersPage() {
           <div className="hidden sm:grid grid-cols-[1.8fr_1fr_1.4fr_1fr_90px] bg-bg px-4.5 py-2.5 text-[11px] font-bold text-[#AEB1BC]">
             <div>NAME</div>
             <div>ROLE</div>
-            <div>SECTOR(S)</div>
+            <div>PANEL</div>
             <div>STATUS</div>
             <div />
           </div>
@@ -39,7 +39,7 @@ export default async function UsersPage() {
                   {u.isSuperAdmin ? " (ADMIN)" : ""}
                 </Badge>
               </div>
-              <div className="text-text-muted">{u.sectorIds?.map(sectorName).join(", ") || "—"}</div>
+              <div className="text-text-muted">{u.role === "jury" ? panelFor(u.id) : "—"}</div>
               <div className={u.status === "active" ? "text-success" : "text-warning"}>
                 ● {u.status === "active" ? "Active" : "Invited"}
               </div>

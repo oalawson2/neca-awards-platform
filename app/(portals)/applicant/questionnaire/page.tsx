@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getApplicationForApplicantUser } from "@/lib/data/applications";
-import { getQuestionnaireSections, getAnswers } from "@/lib/data/questionnaire";
-import { QuestionnaireForm } from "@/components/applicant/QuestionnaireForm";
+import { ComingSoon } from "@/components/ui/ComingSoon";
 
 export default async function ApplicantQuestionnairePage() {
   const user = await getCurrentUser();
@@ -11,14 +10,5 @@ export default async function ApplicantQuestionnairePage() {
   const application = await getApplicationForApplicantUser(user.id);
   if (!application) redirect("/login");
 
-  const [sections, answers] = await Promise.all([getQuestionnaireSections(), getAnswers(application.id)]);
-
-  return (
-    <QuestionnaireForm
-      applicationId={application.id}
-      sections={sections}
-      initialAnswers={answers}
-      initialSectionsCompleted={application.sectionsCompleted}
-    />
-  );
+  return <ComingSoon title="Sections B–I: the assessment questionnaire" phase="the question engine build (task #27)" />;
 }

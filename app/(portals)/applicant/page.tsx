@@ -1,19 +1,18 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
-import { getApplicationForApplicantUser, getScoreSummary } from "@/lib/data/applications";
-import { getDocuments } from "@/lib/data/documents";
-import { getInterviewRequest } from "@/lib/data/interviews";
+import { getApplicationForApplicantUser } from "@/lib/data/applications";
 import { Card } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/Badge";
 import { LinkButton } from "@/components/ui/Button";
-import { ProgressBar } from "@/components/ui/ProgressBar";
 
 /**
- * There's no explicit "Applicant dashboard" wireframe among the 9 screens —
- * 02–08 are a linear flow reached via the top nav's step tabs. This landing
- * page is a judgment call: a status overview that routes into whichever
- * step the applicant is on, so /applicant (the portal root) isn't empty.
+ * There's no explicit "Applicant dashboard" wireframe — this landing page
+ * is a judgment call: a status overview that routes into whichever step
+ * the applicant is on, so /applicant (the portal root) isn't empty.
+ *
+ * Simplified against the new stage model while Sections B–I (task #27),
+ * the document checklist (#28), and reports (#36) are rebuilt — this page
+ * will grow a real progress breakdown once those exist.
  */
 export default async function ApplicantDashboardPage() {
   const user = await getCurrentUser();
@@ -22,16 +21,7 @@ export default async function ApplicantDashboardPage() {
   const application = await getApplicationForApplicantUser(user.id);
   if (!application) redirect("/login");
 
-  const documents = await getDocuments(application.id);
-  const uploadedCount = documents.filter((d) => d.status === "uploaded").length;
-  const scoreSummary = application.status === "released" ? await getScoreSummary(application.id) : null;
-  const interviewRequest = await getInterviewRequest(application.id);
-
-  const nextStepHref =
-    !application.organization.name ? "/applicant/profile" :
-    application.sectionsCompleted < application.totalSections ? "/applicant/questionnaire" :
-    uploadedCount < documents.length ? "/applicant/documents" :
-    "/applicant/review";
+  const nextStepHref = !application.organization.name ? "/applicant/profile" : "/applicant/questionnaire";
 
   return (
     <main className="max-w-4xl mx-auto px-6 py-10">
@@ -51,72 +41,43 @@ export default async function ApplicantDashboardPage() {
           {application.status === "draft" && <LinkButton href={nextStepHref}>Continue application →</LinkButton>}
         </div>
 
-        {application.status === "draft" && (
-          <div className="mt-5 space-y-3">
-            <div>
-              <div className="flex justify-between text-[13px] mb-1">
-                <span>Questionnaire</span>
-                <span className="font-semibold">
-                  {application.sectionsCompleted} of {application.totalSections} sections
-                </span>
-              </div>
-              <ProgressBar percent={(application.sectionsCompleted / application.totalSections) * 100} />
-            </div>
-            <div>
-              <div className="flex justify-between text-[13px] mb-1">
-                <span>Documents</span>
-                <span className="font-semibold">
-                  {uploadedCount} of {documents.length} uploaded
-                </span>
-              </div>
-              <ProgressBar percent={(uploadedCount / Math.max(1, documents.length)) * 100} color="success" />
-            </div>
-          </div>
-        )}
-
-        {(application.status === "awaiting_review" || application.status === "incomplete") && (
-          <p className="text-sm text-text-muted mt-4 leading-relaxed">
-            Your application has been received and is with the Secretariat for a completeness check. You&rsquo;ll
-            hear from us once it advances to jury scoring.
+        {application.eligibilityFlagged && (
+          <p className="text-sm text-warning mt-4 leading-relaxed">
+            One or more eligibility declarations need attention. Your application can still be completed and
+            submitted — the Secretariat will follow up on this directly.
           </p>
         )}
 
-        {(application.status === "scoring" || application.status === "scored") && (
+        {application.status === "submitted" && (
           <p className="text-sm text-text-muted mt-4 leading-relaxed">
-            Your application is being scored independently by the sector jury panel. Scores stay confidential until
-            the Secretariat closes the scoring window.
+            Your self-assessment has been received. Applicants are ranked within their sector and size category, and
+            the Secretariat will shortlist a set of top-ranked applicants to proceed to jury review.
           </p>
         )}
 
-        {application.status === "released" && scoreSummary && (
-          <div className="mt-5 flex items-center justify-between flex-wrap gap-4">
-            <div>
-              <div className="font-heading font-extrabold text-3xl text-navy">
-                {scoreSummary.averageScore}
-                <span className="text-base text-text-muted font-body font-normal">/100</span>
-              </div>
-              <div className="text-[13px] text-text-muted">Final score</div>
-            </div>
-            <LinkButton variant="secondary" href="/applicant/report">
-              View full report →
-            </LinkButton>
-          </div>
+        {application.status === "not_shortlisted" && (
+          <p className="text-sm text-text-muted mt-4 leading-relaxed">
+            Your application was not shortlisted for jury review this cycle. A feedback summary based on your
+            self-assessment will be made available here.
+          </p>
+        )}
+
+        {(application.status === "shortlisted" ||
+          application.status === "stage2_verification" ||
+          application.status === "stage2_interview") && (
+          <p className="text-sm text-text-muted mt-4 leading-relaxed">
+            Your application has been shortlisted and is with the sector jury panel for document verification and
+            interview. Scores stay confidential until this stage concludes.
+          </p>
+        )}
+
+        {(application.status === "scored" || application.status === "released") && (
+          <p className="text-sm text-text-muted mt-4 leading-relaxed">
+            Jury review is complete for your application.
+            {application.status === "released" && " Your report is ready — see the Report tab."}
+          </p>
         )}
       </Card>
-
-      {interviewRequest && (
-        <Card className="mt-4">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div>
-              <div className="font-heading font-bold text-[15px] text-navy">Panel interview</div>
-              <div className="text-[13px] text-text-muted mt-0.5">Book a slot with your sector&rsquo;s juror panel.</div>
-            </div>
-            <Link href="/applicant/interview" className="text-[13px] font-semibold text-info">
-              Book / view →
-            </Link>
-          </div>
-        </Card>
-      )}
     </main>
   );
 }

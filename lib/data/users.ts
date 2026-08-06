@@ -6,8 +6,7 @@ export async function getStaffAndJurors(): Promise<PlatformUser[]> {
   return store.users.filter((u) => u.role === "secretariat" || u.role === "jury");
 }
 
-/** Jurors assigned to a sector (many-to-many via jurorAssignments). */
-export async function getJurorsForSector(sectorId: string): Promise<PlatformUser[]> {
-  const jurorIds = store.jurorAssignments.filter((a) => a.sectorId === sectorId).map((a) => a.jurorId);
-  return store.users.filter((u) => jurorIds.includes(u.id));
+/** The panel (if any) a juror belongs to — panels are fixed at 3x3, assigned separately from invites. */
+export async function getPanelForJuror(jurorId: string) {
+  return store.panels.find((p) => p.jurorIds.includes(jurorId)) ?? null;
 }

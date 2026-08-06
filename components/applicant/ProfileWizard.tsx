@@ -2,21 +2,37 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Label, Input, Select } from "@/components/ui/Field";
+import { Label, Input, Select, Checkbox } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { saveOrganizationProfile } from "@/lib/actions/questionnaire";
-import type { Organization, Sector } from "@/types/domain";
+import { saveOrganizationProfile } from "@/lib/actions/registration";
+import {
+  GEOGRAPHICAL_COVERAGE_LABELS,
+  ORG_SIZE_LABELS,
+  OWNERSHIP_STRUCTURE_LABELS,
+  YEAR_ESTABLISHED_LABELS,
+} from "@/types/domain";
+import type {
+  EligibilityDeclarations,
+  GeographicalCoverage,
+  Organization,
+  OrgSizeTier,
+  OwnershipStructure,
+  Sector,
+  YearEstablishedBand,
+} from "@/types/domain";
 
-const STEP_LABELS = ["Organization details", "Sector & size", "Primary contact", "Review & confirm"];
+const STEP_LABELS = ["Organisation details", "Structure & coverage", "Contact & history", "Eligibility declarations"];
 
 export function ProfileWizard({
   applicationId,
   initialOrg,
+  initialDeclarations,
   sectors,
 }: {
   applicationId: string;
   initialOrg: Organization;
+  initialDeclarations: EligibilityDeclarations;
   sectors: Sector[];
 }) {
   const router = useRouter();
@@ -26,13 +42,19 @@ export function ProfileWizard({
   const [fields, setFields] = useState({
     name: initialOrg.name,
     rcNumber: initialOrg.rcNumber,
-    yearFounded: initialOrg.yearFounded || new Date().getFullYear(),
-    address: initialOrg.address,
+    yearEstablishedBand: initialOrg.yearEstablishedBand,
     sectorId: initialOrg.sectorId,
-    employeeHeadcount: initialOrg.employeeHeadcount || "1–10",
+    sizeTier: initialOrg.sizeTier,
+    geographicalCoverage: initialOrg.geographicalCoverage,
+    ownershipStructure: initialOrg.ownershipStructure,
+    localOrMultinational: initialOrg.localOrMultinational,
+    isUnionised: initialOrg.isUnionised,
     primaryContactName: initialOrg.primaryContactName,
     primaryContactEmail: initialOrg.primaryContactEmail,
+    primaryContactPhone: initialOrg.primaryContactPhone,
+    previousParticipation: initialOrg.previousParticipation,
   });
+  const [declarations, setDeclarations] = useState<EligibilityDeclarations>(initialDeclarations);
 
   function update<K extends keyof typeof fields>(key: K, value: (typeof fields)[K]) {
     setFields((f) => ({ ...f, [key]: value }));
@@ -41,7 +63,7 @@ export function ProfileWizard({
   function next() {
     setError(null);
     if (step === 0 && (!fields.name.trim() || !fields.rcNumber.trim())) {
-      setError("Organization name and RC number are required.");
+      setError("Organisation name and RC number are required.");
       return;
     }
     if (step === 2 && (!fields.primaryContactName.trim() || !fields.primaryContactEmail.trim())) {
@@ -56,24 +78,36 @@ export function ProfileWizard({
     setStep((s) => Math.max(0, s - 1));
   }
 
+  async function save() {
+    setError(null);
+    const result = await saveOrganizationProfile(applicationId, fields, declarations);
+    if (!result.success) {
+      setError(result.error ?? "Could not save profile.");
+      return false;
+    }
+    return true;
+  }
+
   function saveDraft() {
     startTransition(async () => {
-      await saveOrganizationProfile(applicationId, fields);
+      await save();
     });
   }
 
   function confirmAndContinue() {
     startTransition(async () => {
-      const result = await saveOrganizationProfile(applicationId, fields);
-      if (result.success) router.push("/applicant/questionnaire");
+      const ok = await save();
+      if (ok) router.push("/applicant/questionnaire");
     });
   }
+
+  const allDeclared = Object.values(declarations).every(Boolean);
 
   return (
     <div className="flex flex-col lg:flex-row">
       <aside className="lg:w-[280px] lg:border-r border-border px-6 sm:px-8 lg:px-6 py-6">
         <div className="hidden lg:block">
-          <div className="text-xs font-bold tracking-wide text-[#AEB1BC] mb-[18px]">SETUP STEPS</div>
+          <div className="text-xs font-bold tracking-wide text-[#AEB1BC] mb-[18px]">SECTION A — ELIGIBILITY & REGISTRATION</div>
           <div className="flex flex-col gap-5">
             {STEP_LABELS.map((label, i) => (
               <div key={label} className="flex gap-3 items-center">
@@ -101,40 +135,40 @@ export function ProfileWizard({
       </aside>
 
       <div className="flex-1 px-6 sm:px-8 lg:px-13 py-8 lg:py-10 max-w-2xl">
-        <h1 className="font-heading font-extrabold text-xl sm:text-[22px] text-navy mb-6">{STEP_LABELS[step]}</h1>
+        <h1 className="font-heading font-extrabold text-xl sm:text-[22px] text-navy mb-1.5">{STEP_LABELS[step]}</h1>
+        {step === 0 && (
+          <p className="text-[13px] text-text-muted mb-6 leading-relaxed">
+            Section A is not scored — it establishes eligibility and populates your profile used throughout the
+            assessment.
+          </p>
+        )}
 
         {error && <div className="text-sm text-error mb-4">{error}</div>}
 
         {step === 0 && (
           <div className="grid sm:grid-cols-2 gap-5">
             <div className="sm:col-span-2">
-              <Label>Registered organization name</Label>
+              <Label>Organisation name</Label>
               <Input value={fields.name} onChange={(e) => update("name", e.target.value)} />
             </div>
             <div>
-              <Label>RC / registration number</Label>
+              <Label>RC number</Label>
               <Input value={fields.rcNumber} onChange={(e) => update("rcNumber", e.target.value)} />
             </div>
             <div>
-              <Label>Year founded</Label>
-              <Input
-                type="number"
-                value={fields.yearFounded}
-                onChange={(e) => update("yearFounded", Number(e.target.value))}
-              />
+              <Label>Year established</Label>
+              <Select value={fields.yearEstablishedBand} onChange={(e) => update("yearEstablishedBand", e.target.value as YearEstablishedBand)}>
+                {Object.entries(YEAR_ESTABLISHED_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
             </div>
-            <div className="sm:col-span-2">
-              <Label>Registered address</Label>
-              <Input value={fields.address} onChange={(e) => update("address", e.target.value)} />
-            </div>
-          </div>
-        )}
-
-        {step === 1 && (
-          <div className="grid sm:grid-cols-2 gap-5">
             <div>
-              <Label>Industry / sector</Label>
+              <Label>Sector</Label>
               <Select value={fields.sectorId} onChange={(e) => update("sectorId", e.target.value)}>
+                <option value="">Select a sector</option>
                 {sectors.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
@@ -143,11 +177,11 @@ export function ProfileWizard({
               </Select>
             </div>
             <div>
-              <Label>Employee headcount</Label>
-              <Select value={fields.employeeHeadcount} onChange={(e) => update("employeeHeadcount", e.target.value)}>
-                {["1–10", "10–50", "50–250", "250–1000", "1000+"].map((band) => (
-                  <option key={band} value={band}>
-                    {band}
+              <Label>Organisation size</Label>
+              <Select value={fields.sizeTier} onChange={(e) => update("sizeTier", e.target.value as OrgSizeTier)}>
+                {Object.entries(ORG_SIZE_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
                   </option>
                 ))}
               </Select>
@@ -155,32 +189,141 @@ export function ProfileWizard({
           </div>
         )}
 
+        {step === 1 && (
+          <div className="grid sm:grid-cols-2 gap-5">
+            <div>
+              <Label>Geographical coverage</Label>
+              <Select
+                value={fields.geographicalCoverage}
+                onChange={(e) => update("geographicalCoverage", e.target.value as GeographicalCoverage)}
+              >
+                {Object.entries(GEOGRAPHICAL_COVERAGE_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <Label>Ownership structure</Label>
+              <Select
+                value={fields.ownershipStructure}
+                onChange={(e) => update("ownershipStructure", e.target.value as OwnershipStructure)}
+              >
+                {Object.entries(OWNERSHIP_STRUCTURE_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <Label>Local or multinational</Label>
+              <Select
+                value={fields.localOrMultinational}
+                onChange={(e) => update("localOrMultinational", e.target.value as "local" | "multinational")}
+              >
+                <option value="local">Local</option>
+                <option value="multinational">Multinational</option>
+              </Select>
+            </div>
+            <div>
+              <Label>Is your workforce unionised?</Label>
+              <Select
+                value={fields.isUnionised ? "yes" : "no"}
+                onChange={(e) => update("isUnionised", e.target.value === "yes")}
+              >
+                <option value="no">No</option>
+                <option value="yes">Yes</option>
+              </Select>
+              <p className="text-xs text-text-muted mt-1.5">
+                This determines which Labour Relations (Section D) questions you&rsquo;ll see later.
+              </p>
+            </div>
+          </div>
+        )}
+
         {step === 2 && (
           <div className="grid sm:grid-cols-2 gap-5">
             <div>
-              <Label>Primary contact name</Label>
+              <Label>Contact person full name</Label>
               <Input value={fields.primaryContactName} onChange={(e) => update("primaryContactName", e.target.value)} />
             </div>
             <div>
-              <Label>Primary contact email</Label>
+              <Label>Contact email</Label>
               <Input
                 type="email"
                 value={fields.primaryContactEmail}
                 onChange={(e) => update("primaryContactEmail", e.target.value)}
               />
             </div>
+            <div>
+              <Label>Contact telephone</Label>
+              <Input value={fields.primaryContactPhone} onChange={(e) => update("primaryContactPhone", e.target.value)} />
+            </div>
+            <div>
+              <Label>Previous participation in the Awards</Label>
+              <Select
+                value={fields.previousParticipation.participated ? "yes" : "no"}
+                onChange={(e) =>
+                  update("previousParticipation", {
+                    participated: e.target.value === "yes",
+                    years: e.target.value === "yes" ? fields.previousParticipation.years : [],
+                  })
+                }
+              >
+                <option value="no">No</option>
+                <option value="yes">Yes</option>
+              </Select>
+              {fields.previousParticipation.participated && (
+                <Input
+                  className="mt-2"
+                  placeholder="Year(s), comma-separated e.g. 2024, 2025"
+                  value={fields.previousParticipation.years.join(", ")}
+                  onChange={(e) =>
+                    update("previousParticipation", {
+                      participated: true,
+                      years: e.target.value.split(",").map((y) => y.trim()).filter(Boolean),
+                    })
+                  }
+                />
+              )}
+            </div>
           </div>
         )}
 
         {step === 3 && (
-          <div className="flex flex-col gap-3 text-sm">
-            <SummaryRow label="Organization" value={fields.name} />
-            <SummaryRow label="RC number" value={fields.rcNumber} />
-            <SummaryRow label="Year founded" value={String(fields.yearFounded)} />
-            <SummaryRow label="Address" value={fields.address} />
-            <SummaryRow label="Sector" value={sectors.find((s) => s.id === fields.sectorId)?.name ?? ""} />
-            <SummaryRow label="Employee headcount" value={fields.employeeHeadcount} />
-            <SummaryRow label="Primary contact" value={`${fields.primaryContactName} · ${fields.primaryContactEmail}`} />
+          <div className="flex flex-col gap-3">
+            <p className="text-[13px] text-text-muted leading-relaxed mb-1">
+              Each declaration below is required before proceeding. If any is unchecked, your application will still
+              be accepted but flagged for Secretariat review rather than rejected outright, in case of a genuine
+              documentation gap that can be resolved before Stage 2.
+            </p>
+            <Checkbox
+              label="Our organisation is legally registered in Nigeria."
+              checked={declarations.legallyRegistered}
+              onChange={(e) => setDeclarations((d) => ({ ...d, legallyRegistered: e.target.checked }))}
+            />
+            <Checkbox
+              label="Our organisation is tax-compliant."
+              checked={declarations.taxCompliant}
+              onChange={(e) => setDeclarations((d) => ({ ...d, taxCompliant: e.target.checked }))}
+            />
+            <Checkbox
+              label="Our organisation is not currently under any regulatory sanction."
+              checked={declarations.notUnderSanction}
+              onChange={(e) => setDeclarations((d) => ({ ...d, notUnderSanction: e.target.checked }))}
+            />
+            <Checkbox
+              label="The information provided in this application is accurate."
+              checked={declarations.infoAccurate}
+              onChange={(e) => setDeclarations((d) => ({ ...d, infoAccurate: e.target.checked }))}
+            />
+            {!allDeclared && (
+              <div className="text-xs text-warning mt-1">
+                One or more declarations are unchecked — this will flag your application for Secretariat review.
+              </div>
+            )}
           </div>
         )}
 
@@ -208,15 +351,6 @@ export function ProfileWizard({
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function SummaryRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between border-b border-border pb-2.5">
-      <span className="text-text-muted">{label}</span>
-      <span className="font-semibold text-right">{value || "—"}</span>
     </div>
   );
 }

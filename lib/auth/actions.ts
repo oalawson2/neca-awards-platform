@@ -64,7 +64,7 @@ export async function signUpApplicant(input: SignUpInput): Promise<AuthResult> {
   const userId = generateId("app-user");
   const orgId = generateId("org");
   const appId = generateId("app");
-  const defaultSectorId = store.sectors[0].id;
+  const defaultSectorId = store.sectors[0]?.id ?? "";
 
   store.users.push({ id: userId, name: email.split("@")[0], email, role: "applicant", status: "active" });
   store.credentials.push({ userId, email, password: input.password });
@@ -72,24 +72,29 @@ export async function signUpApplicant(input: SignUpInput): Promise<AuthResult> {
     id: orgId,
     name: "",
     rcNumber: "",
-    yearFounded: new Date().getFullYear(),
-    address: "",
+    yearEstablishedBand: "lt5",
     sectorId: defaultSectorId,
-    employeeHeadcount: "",
+    sizeTier: "micro",
+    geographicalCoverage: "single_state",
+    ownershipStructure: "private",
+    localOrMultinational: "local",
+    isUnionised: false,
     primaryContactName: "",
     primaryContactEmail: email,
+    primaryContactPhone: "",
+    previousParticipation: { participated: false, years: [] },
   });
   applicantOrgLink[userId] = orgId;
   store.applications.push({
     id: appId,
     referenceNo: `EEA-2026-${String(Math.floor(Math.random() * 9000) + 1000)}`,
     organizationId: orgId,
-    sectorId: defaultSectorId,
     status: "draft",
+    eligibilityDeclarations: { legallyRegistered: false, taxCompliant: false, notUnderSanction: false, infoAccurate: false },
+    eligibilityFlagged: false,
     submittedAt: null,
-    preliminaryScore: null,
-    totalSections: store.questionnaireSections.length,
-    sectionsCompleted: 0,
+    stage1Score: null,
+    isShortlisted: null,
   });
 
   const cookieStore = await cookies();

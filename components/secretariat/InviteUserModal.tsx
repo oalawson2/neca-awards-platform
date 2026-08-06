@@ -5,21 +5,24 @@ import { Modal } from "@/components/ui/Modal";
 import { Label, Input, Select } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { inviteUser } from "@/lib/actions/users";
-import type { Sector } from "@/types/domain";
 
-export function InviteUserModal({ sectors }: { sectors: Sector[] }) {
+/**
+ * Sector assignment isn't part of inviting a juror anymore — jurors join
+ * one of the 3 fixed panels, assigned separately by the Secretariat once
+ * they accept (see task #30's panel-assignment build-out).
+ */
+export function InviteUserModal() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"secretariat" | "jury">("jury");
-  const [sectorId, setSectorId] = useState(sectors[0]?.id ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function submit() {
     setError(null);
     startTransition(async () => {
-      const result = await inviteUser({ name, email, role, sectorIds: role === "jury" ? [sectorId] : undefined });
+      const result = await inviteUser({ name, email, role });
       if (!result.success) {
         setError(result.error ?? "Could not send invite.");
         return;
@@ -48,21 +51,14 @@ export function InviteUserModal({ sectors }: { sectors: Sector[] }) {
           <Label>Name</Label>
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
         </div>
-        <div className="mb-3.5">
+        <div className="mb-5">
           <Label>Email</Label>
           <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" />
         </div>
         {role === "jury" && (
-          <div className="mb-5">
-            <Label>Sector(s)</Label>
-            <Select value={sectorId} onChange={(e) => setSectorId(e.target.value)}>
-              {sectors.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </Select>
-          </div>
+          <p className="text-xs text-text-muted mb-5 -mt-2 leading-relaxed">
+            Panel assignment (one of the 3 fixed panels) happens separately, once this juror accepts their invite.
+          </p>
         )}
         <div className="flex gap-2.5 justify-end">
           <Button variant="secondary" size="sm" onClick={() => setOpen(false)}>

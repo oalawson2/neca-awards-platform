@@ -29,18 +29,22 @@ export function Badge({ tone = "neutral", children, className }: { tone?: BadgeT
 
 const STATUS_TONE: Record<string, BadgeTone> = {
   draft: "draft",
-  awaiting_review: "review",
-  incomplete: "error",
-  scoring: "info",
+  submitted: "review",
+  not_shortlisted: "neutral",
+  shortlisted: "info",
+  stage2_verification: "info",
+  stage2_interview: "info",
   scored: "success",
   released: "winner",
 };
 
 const STATUS_LABEL: Record<string, string> = {
   draft: "DRAFT",
-  awaiting_review: "AWAITING REVIEW",
-  incomplete: "INCOMPLETE",
-  scoring: "IN SCORING",
+  submitted: "SUBMITTED",
+  not_shortlisted: "NOT SHORTLISTED",
+  shortlisted: "SHORTLISTED",
+  stage2_verification: "DOCUMENT VERIFICATION",
+  stage2_interview: "SECTOR INTERVIEW",
   scored: "SCORED",
   released: "RELEASED",
 };

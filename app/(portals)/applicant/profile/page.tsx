@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getApplicationForApplicantUser } from "@/lib/data/applications";
-import { getSectors } from "@/lib/data/sectors-criteria";
+import { getSectors } from "@/lib/data/sectors";
 import { ProfileWizard } from "@/components/applicant/ProfileWizard";
 
 export default async function ApplicantProfilePage() {
@@ -13,5 +13,12 @@ export default async function ApplicantProfilePage() {
 
   const sectors = await getSectors();
 
-  return <ProfileWizard applicationId={application.id} initialOrg={application.organization} sectors={sectors} />;
+  return (
+    <ProfileWizard
+      applicationId={application.id}
+      initialOrg={application.organization}
+      initialDeclarations={application.eligibilityDeclarations}
+      sectors={sectors}
+    />
+  );
 }

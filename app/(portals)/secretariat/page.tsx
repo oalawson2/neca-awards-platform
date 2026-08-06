@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getApplications, getDashboardStats } from "@/lib/data/applications";
-import { getSectors } from "@/lib/data/sectors-criteria";
+import { getSectors } from "@/lib/data/sectors";
 import { StatTile } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/Badge";
 import { ApplicationsFilterBar } from "@/components/secretariat/ApplicationsFilterBar";
@@ -32,9 +32,9 @@ export default async function SecretariatDashboardPage({
       <div className="p-6 sm:p-7 flex flex-col gap-4 overflow-y-auto flex-1">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
           <StatTile label="Total applications" value={stats.total} />
-          <StatTile label="Awaiting review" value={stats.awaitingReview} tone="warning" />
-          <StatTile label="In scoring" value={stats.inScoring} tone="info" />
-          <StatTile label="Scoring complete" value={stats.scoringComplete} tone="success" />
+          <StatTile label="Eligibility flagged" value={stats.eligibilityFlagged} tone="warning" />
+          <StatTile label="In Stage 2" value={stats.inStage2} tone="info" />
+          <StatTile label="Scored" value={stats.scored} tone="success" />
         </div>
 
         <ApplicationsFilterBar sectors={sectors} />
@@ -56,7 +56,7 @@ export default async function SecretariatDashboardPage({
               className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr_1fr_90px] gap-1 sm:gap-0 px-4.5 py-3.5 border-t border-border items-center text-[13px]"
             >
               <div className="font-semibold sm:font-normal">{app.organization.name || "(unnamed organization)"}</div>
-              <div className="text-text-muted">{sectors.find((s) => s.id === app.sectorId)?.name}</div>
+              <div className="text-text-muted">{sectors.find((s) => s.id === app.organization.sectorId)?.name}</div>
               <div className="text-text-muted">{formatDate(app.submittedAt)}</div>
               <div>
                 <StatusBadge status={app.status} />

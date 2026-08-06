@@ -4,7 +4,12 @@ import { revalidatePath } from "next/cache";
 import { store, generateId } from "@/lib/mock/store";
 import { logAction } from "@/lib/data/audit";
 
-export async function inviteUser(input: { name: string; email: string; role: "secretariat" | "jury"; sectorIds?: string[] }) {
+/**
+ * Jury invites are name/email only here — panel membership (fixed at 3
+ * panels of 3) is assigned separately by the Secretariat once the juror
+ * accepts, not at invite time. See task #30 for the panel-assignment UI.
+ */
+export async function inviteUser(input: { name: string; email: string; role: "secretariat" | "jury" }) {
   const email = input.email.trim().toLowerCase();
   if (!email) return { success: false, error: "Email is required." };
   if (store.users.some((u) => u.email.toLowerCase() === email)) {
@@ -18,13 +23,7 @@ export async function inviteUser(input: { name: string; email: string; role: "se
     email,
     role: input.role,
     status: "invited",
-    sectorIds: input.role === "jury" ? input.sectorIds ?? [] : undefined,
   });
-  if (input.role === "jury") {
-    for (const sectorId of input.sectorIds ?? []) {
-      store.jurorAssignments.push({ jurorId: id, sectorId });
-    }
-  }
   store.credentials.push({ userId: id, email, password: "" });
 
   logAction("Funke Adeyemi", `Invited ${input.role}`, store.users.find((u) => u.id === id)!.name);

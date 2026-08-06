@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { addSector } from "@/lib/actions/sectors-criteria";
+import { addSector } from "@/lib/actions/sectors";
 import { Input } from "@/components/ui/Field";
 
 export function AddSectorControl() {

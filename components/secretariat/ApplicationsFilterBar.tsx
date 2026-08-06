@@ -7,9 +7,12 @@ import type { Sector } from "@/types/domain";
 
 const STATUS_OPTIONS = [
   { value: "", label: "All statuses" },
-  { value: "awaiting_review", label: "Awaiting review" },
-  { value: "incomplete", label: "Incomplete" },
-  { value: "scoring", label: "In scoring" },
+  { value: "draft", label: "Draft" },
+  { value: "submitted", label: "Submitted" },
+  { value: "not_shortlisted", label: "Not shortlisted" },
+  { value: "shortlisted", label: "Shortlisted" },
+  { value: "stage2_verification", label: "Document verification" },
+  { value: "stage2_interview", label: "Sector interview" },
   { value: "scored", label: "Scored" },
   { value: "released", label: "Released" },
 ];

@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getApplicationForApplicantUser } from "@/lib/data/applications";
-import { ComingSoon } from "@/components/ui/ComingSoon";
+import { getAnswers } from "@/lib/data/answers";
+import { QuestionnaireForm } from "@/components/applicant/QuestionnaireForm";
 
 export default async function ApplicantQuestionnairePage() {
   const user = await getCurrentUser();
@@ -9,6 +10,15 @@ export default async function ApplicantQuestionnairePage() {
 
   const application = await getApplicationForApplicantUser(user.id);
   if (!application) redirect("/login");
+  if (!application.organization.name) redirect("/applicant/profile");
 
-  return <ComingSoon title="Sections B–I: the assessment questionnaire" phase="the question engine build (task #27)" />;
+  const answers = await getAnswers(application.id);
+
+  return (
+    <QuestionnaireForm
+      applicationId={application.id}
+      isUnionised={application.organization.isUnionised}
+      initialAnswers={answers}
+    />
+  );
 }

@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { href: "/secretariat/live-scoring", label: "Live Scoring" },
   { href: "/secretariat/users", label: "Users & Roles" },
   { href: "/secretariat/criteria", label: "Sectors & Framework" },
+  { href: "/secretariat/panels", label: "Jury Panels" },
   { href: "/secretariat/ai-reports", label: "AI Reports" },
   { href: "/secretariat/winners", label: "Winners" },
   { href: "/secretariat/audit-log", label: "Audit Log" },

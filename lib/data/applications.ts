@@ -42,20 +42,26 @@ export async function getApplicationForApplicantUser(userId: string): Promise<Ap
 }
 
 /**
- * Applications in sectors assigned to a juror's panel, tagged with
- * whether that application is currently in this juror's Stage 2 work
- * (document verification or interview). Panel independence: this only
- * ever returns applications in the juror's own panel's assigned sectors
- * — a real data-access gate, not a UI-only filter, so it maps directly to
- * an RLS policy later (see task #30 for the fuller panel-assignment
- * build-out; this is the minimal version other pages need meanwhile).
+ * Applications in sectors assigned to a juror's panel — panel
+ * independence: this only ever returns applications in the juror's own
+ * panel's assigned sectors, a real data-access gate (not a UI-only
+ * filter) so it maps directly to an RLS policy later. Also excludes any
+ * application this specific juror has been excused from via a recorded
+ * conflict of interest (doc section 11.5) — the other 2 panel members
+ * still see and cover it; only this juror's own view is gated.
  */
 export async function getApplicationsForJurorPanel(jurorId: string) {
   const panel = store.panels.find((p) => p.jurorIds.includes(jurorId));
   if (!panel) return [];
   const sectorIds = store.panelSectorAssignments.filter((a) => a.panelId === panel.id).map((a) => a.sectorId);
+  const excusedApplicationIds = new Set(
+    store.jurorConflicts
+      .filter((c) => c.jurorId === jurorId && c.resolution === "excused_from_applicant" && c.applicationId)
+      .map((c) => c.applicationId)
+  );
   return store.applications
     .filter((a) => a.status !== "draft")
+    .filter((a) => !excusedApplicationIds.has(a.id))
     .map(withOrg)
     .filter((a) => sectorIds.includes(a.organization.sectorId));
 }

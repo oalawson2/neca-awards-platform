@@ -1,7 +1,8 @@
 import { redirect, notFound } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getApplication } from "@/lib/data/applications";
-import { ComingSoon } from "@/components/ui/ComingSoon";
+import { getDocumentsForVerification, getRedFlagCount } from "@/lib/data/stage2a";
+import { DocumentVerificationPanel } from "@/components/jury/DocumentVerificationPanel";
 
 export default async function JuryDocumentReviewPage({ params }: { params: Promise<{ applicationId: string }> }) {
   const user = await getCurrentUser();
@@ -11,10 +12,17 @@ export default async function JuryDocumentReviewPage({ params }: { params: Promi
   const application = await getApplication(applicationId);
   if (!application) notFound();
 
+  const [documents, redFlagCount] = await Promise.all([
+    getDocumentsForVerification(applicationId, user.id),
+    getRedFlagCount(applicationId),
+  ]);
+
   return (
-    <ComingSoon
-      title={`Document verification — ${application.organization.name}`}
-      phase="the Stage 2a document verification build (task #31)"
+    <DocumentVerificationPanel
+      organizationName={application.organization.name}
+      documents={documents}
+      jurorId={user.id}
+      redFlagCount={redFlagCount}
     />
   );
 }

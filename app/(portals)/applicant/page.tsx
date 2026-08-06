@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getApplicationForApplicantUser } from "@/lib/data/applications";
+import { getInterviewSession } from "@/lib/data/interviews";
 import { Card } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/Badge";
 import { LinkButton } from "@/components/ui/Button";
@@ -21,6 +23,7 @@ export default async function ApplicantDashboardPage() {
   const application = await getApplicationForApplicantUser(user.id);
   if (!application) redirect("/login");
 
+  const interviewSession = await getInterviewSession(application.id);
   const nextStepHref = !application.organization.name ? "/applicant/profile" : "/applicant/questionnaire";
 
   return (
@@ -78,6 +81,20 @@ export default async function ApplicantDashboardPage() {
           </p>
         )}
       </Card>
+
+      {interviewSession && (
+        <Card className="mt-4">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <div className="font-heading font-bold text-[15px] text-navy">Panel interview</div>
+              <div className="text-[13px] text-text-muted mt-0.5">Book a slot with your sector&rsquo;s juror panel.</div>
+            </div>
+            <Link href="/applicant/interview" className="text-[13px] font-semibold text-info">
+              Book / view →
+            </Link>
+          </div>
+        </Card>
+      )}
     </main>
   );
 }

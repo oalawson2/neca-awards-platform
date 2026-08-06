@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
 import { verifyDocumentCredible, flagDocument } from "@/lib/actions/stage2a";
+import { requestInterview } from "@/lib/actions/interviews";
 import { RED_FLAG_LABELS } from "@/types/domain";
 import type { DocumentVerification, RedFlag, RedFlagReason } from "@/types/domain";
 import type { DocumentWithVerification } from "@/lib/data/stage2a";
@@ -11,23 +12,41 @@ import type { DocumentWithVerification } from "@/lib/data/stage2a";
 const RED_FLAG_REASONS = Object.keys(RED_FLAG_LABELS) as RedFlagReason[];
 
 export function DocumentVerificationPanel({
+  applicationId,
   organizationName,
   documents,
   jurorId,
+  jurorName,
   redFlagCount,
+  interviewAlreadyRequested,
 }: {
+  applicationId: string;
   organizationName: string;
   documents: DocumentWithVerification[];
   jurorId: string;
+  jurorName: string;
   redFlagCount: number;
+  interviewAlreadyRequested: boolean;
 }) {
   const [items, setItems] = useState(documents);
   const [activeId, setActiveId] = useState(documents[0]?.id);
   const [flagReason, setFlagReason] = useState<RedFlagReason>("undated");
   const [isPending, startTransition] = useTransition();
+  const [interviewRequested, setInterviewRequested] = useState(interviewAlreadyRequested);
+  const [interviewError, setInterviewError] = useState<string | null>(null);
 
   const active = items.find((d) => d.id === activeId) ?? items[0];
   const reviewedCount = items.filter((d) => d.myVerification).length;
+  const allReviewed = items.length > 0 && reviewedCount === items.length;
+
+  function handleRequestInterview() {
+    setInterviewError(null);
+    startTransition(async () => {
+      const result = await requestInterview(applicationId, jurorId, jurorName);
+      if (result.success) setInterviewRequested(true);
+      else setInterviewError(result.error ?? "Could not request interview.");
+    });
+  }
 
   function goNext() {
     const idx = items.findIndex((d) => d.id === active?.id);
@@ -84,7 +103,25 @@ export function DocumentVerificationPanel({
         <div className="text-[13px] font-bold text-navy">
           {reviewedCount} of {items.length} documents reviewed
         </div>
-        {redFlagCount >= 3 && <Badge tone="error">3+ RED FLAGS — SECRETARIAT REVIEW TRIGGERED</Badge>}
+        <div className="flex items-center gap-2.5">
+          {redFlagCount >= 3 && <Badge tone="error">3+ RED FLAGS — SECRETARIAT REVIEW TRIGGERED</Badge>}
+          {interviewRequested ? (
+            <span className="text-[13px] font-semibold text-success">✓ Interview requested</span>
+          ) : allReviewed ? (
+            <>
+              {interviewError && <span className="text-xs text-error">{interviewError}</span>}
+              <button
+                onClick={handleRequestInterview}
+                disabled={isPending}
+                className="bg-gold text-white rounded-[10px] px-4 py-2 text-[13px] font-semibold"
+              >
+                Request Interview
+              </button>
+            </>
+          ) : (
+            <span className="text-xs text-text-muted">Review every document to unlock interview requests</span>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col sm:flex-row flex-1 min-h-0">

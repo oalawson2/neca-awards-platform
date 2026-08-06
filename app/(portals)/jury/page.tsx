@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { getApplicationsForJurorPanel } from "@/lib/data/applications";
 import { getPanelForJuror } from "@/lib/data/users";
 import { getSectors } from "@/lib/data/sectors";
+import { getInterviewSession } from "@/lib/data/interviews";
 import { Badge, StatusBadge } from "@/components/ui/Badge";
 import { LinkButton } from "@/components/ui/Button";
 
@@ -15,6 +16,9 @@ export default async function JuryDashboardPage() {
     getSectors(),
     getPanelForJuror(user.id),
   ]);
+  const interviewSessions = Object.fromEntries(
+    await Promise.all(companies.map(async (c) => [c.id, await getInterviewSession(c.id)] as const))
+  );
 
   return (
     <div className="max-w-4xl mx-auto px-6 sm:px-8 py-8 sm:py-10">
@@ -40,6 +44,11 @@ export default async function JuryDashboardPage() {
                 <LinkButton variant="secondary" size="sm" href={`/jury/documents/${c.id}`}>
                   Review documents
                 </LinkButton>
+                {interviewSessions[c.id] && (
+                  <LinkButton variant="secondary" size="sm" href={`/jury/interview/${c.id}`}>
+                    Interview
+                  </LinkButton>
+                )}
                 <LinkButton size="sm" href={`/jury/scorecard/${c.id}`}>
                   Scorecard →
                 </LinkButton>

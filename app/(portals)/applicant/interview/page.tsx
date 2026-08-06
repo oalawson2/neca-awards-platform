@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getApplicationForApplicantUser } from "@/lib/data/applications";
-import { ComingSoon } from "@/components/ui/ComingSoon";
+import { getBookableSlotsForApplication, getBookedSlotForApplication, getInterviewSession } from "@/lib/data/interviews";
+import { InterviewBooking } from "@/components/applicant/InterviewBooking";
 
 export default async function ApplicantInterviewPage() {
   const user = await getCurrentUser();
@@ -10,5 +11,19 @@ export default async function ApplicantInterviewPage() {
   const application = await getApplicationForApplicantUser(user.id);
   if (!application) redirect("/login");
 
-  return <ComingSoon title="Panel interview booking" phase="the Stage 2b sector interview restructure (task #32)" />;
+  const [slots, bookedSlot, session] = await Promise.all([
+    getBookableSlotsForApplication(application.id),
+    getBookedSlotForApplication(application.id),
+    getInterviewSession(application.id),
+  ]);
+
+  return (
+    <InterviewBooking
+      applicationId={application.id}
+      organizationName={application.organization.name}
+      slots={slots}
+      bookedSlot={bookedSlot}
+      interviewRequested={!!session}
+    />
+  );
 }

@@ -1,12 +1,12 @@
 import { getStaffAndJurors } from "@/lib/data/users";
-import { store } from "@/lib/mock/store";
+import { getPanelNamesByJuror } from "@/lib/data/panels";
 import { resendInviteFormAction } from "@/lib/actions/users";
 import { Badge } from "@/components/ui/Badge";
 import { InviteUserModal } from "@/components/secretariat/InviteUserModal";
 
 export default async function UsersPage() {
-  const users = await getStaffAndJurors();
-  const panelFor = (userId: string) => store.panels.find((p) => p.jurorIds.includes(userId))?.name ?? "—";
+  const [users, panelNames] = await Promise.all([getStaffAndJurors(), getPanelNamesByJuror()]);
+  const panelFor = (userId: string) => panelNames[userId] ?? "—";
 
   return (
     <div className="flex flex-col h-full">

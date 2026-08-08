@@ -9,7 +9,7 @@ import { saveScorecardDimension, saveInterviewFinding, submitScorecard } from "@
 import { blendedPillarScore } from "@/lib/data/scorecards";
 import { PILLARS } from "@/lib/mock/framework";
 import { PILLAR_SCORE_WEIGHTS } from "@/types/domain";
-import type { PillarCode, PillarScorecard } from "@/types/domain";
+import type { PillarCode, PillarScorecard, ScorecardRound } from "@/types/domain";
 
 const SCORED_PILLARS = PILLARS.filter((p) => p.scored);
 const DIMENSIONS: { key: "policyExists" | "implementation" | "evidenceQuality" | "measurableImpact"; label: string }[] = [
@@ -19,13 +19,13 @@ const DIMENSIONS: { key: "policyExists" | "implementation" | "evidenceQuality" |
   { key: "measurableImpact", label: `Measurable Impact (${PILLAR_SCORE_WEIGHTS.measurableImpact * 100}%)` },
 ];
 
-function emptyCard(applicationId: string, jurorId: string, pillarCode: PillarCode): PillarScorecard {
+function emptyCard(applicationId: string, jurorId: string, pillarCode: PillarCode, round: ScorecardRound): PillarScorecard {
   return {
     id: `draft-${pillarCode}`,
     applicationId,
     jurorId,
     pillarCode,
-    round: "sector",
+    round,
     policyExists: null,
     implementation: null,
     evidenceQuality: null,
@@ -40,18 +40,20 @@ export function ScorecardForm({
   jurorName,
   organizationName,
   initialCards,
+  round = "sector",
 }: {
   applicationId: string;
   jurorId: string;
   jurorName: string;
   organizationName: string;
   initialCards: PillarScorecard[];
+  round?: ScorecardRound;
 }) {
   const router = useRouter();
   const [cardsByPillar, setCardsByPillar] = useState<Record<string, PillarScorecard>>(() => {
     const map: Record<string, PillarScorecard> = {};
     for (const p of SCORED_PILLARS) {
-      map[p.code] = initialCards.find((c) => c.pillarCode === p.code) ?? emptyCard(applicationId, jurorId, p.code);
+      map[p.code] = initialCards.find((c) => c.pillarCode === p.code) ?? emptyCard(applicationId, jurorId, p.code, round);
     }
     return map;
   });
@@ -68,14 +70,14 @@ export function ScorecardForm({
   function setDimension(dimension: (typeof DIMENSIONS)[number]["key"], value: number) {
     setCardsByPillar((prev) => ({ ...prev, [pillar.code]: { ...prev[pillar.code], [dimension]: value } }));
     startTransition(() => {
-      saveScorecardDimension(applicationId, jurorId, pillar.code, dimension, value);
+      saveScorecardDimension(applicationId, jurorId, pillar.code, dimension, value, round);
     });
   }
 
   function setFinding(value: string) {
     setCardsByPillar((prev) => ({ ...prev, [pillar.code]: { ...prev[pillar.code], interviewFinding: value } }));
     startTransition(() => {
-      saveInterviewFinding(applicationId, jurorId, pillar.code, value);
+      saveInterviewFinding(applicationId, jurorId, pillar.code, value, round);
     });
   }
 
@@ -96,13 +98,13 @@ export function ScorecardForm({
       return;
     }
     startTransition(async () => {
-      const result = await submitScorecard(applicationId, jurorId, jurorName);
+      const result = await submitScorecard(applicationId, jurorId, jurorName, round);
       if (!result.success) {
         setError(result.error ?? "Could not submit scorecard.");
         setOutstandingPillars(result.outstandingPillars ?? null);
         return;
       }
-      router.push("/jury");
+      router.push(round === "employer_of_year" ? "/jury/employer-of-year" : "/jury");
       router.refresh();
     });
   }

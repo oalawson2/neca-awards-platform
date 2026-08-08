@@ -15,6 +15,7 @@ export function JuryTabNav({ userName, defaultApplicationId }: { userName: strin
     { href: defaultApplicationId ? `/jury/documents/${defaultApplicationId}` : "/jury", match: "/jury/documents", label: "Documents", short: "Docs" },
     { href: defaultApplicationId ? `/jury/scorecard/${defaultApplicationId}` : "/jury", match: "/jury/scorecard", label: "Scorecard", short: "Score" },
     { href: "/jury/availability", label: "Availability", short: "Available" },
+    { href: "/jury/employer-of-year", label: "Employer of the Year", short: "EOTY" },
   ];
 
   return (

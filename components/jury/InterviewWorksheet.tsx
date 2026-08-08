@@ -2,14 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
-import { Textarea, Input } from "@/components/ui/Field";
+import { Textarea, Input, Select } from "@/components/ui/Field";
 import { formatDate } from "@/lib/utils";
 import { saveConsistencyNote, addLiveEvidenceRequest, markEvidenceReceived } from "@/lib/actions/interviews";
-import { SAMPLE_PROBES } from "@/lib/data/interviews";
-import { PILLARS } from "@/lib/mock/framework";
+import { PILLARS, ASSESSMENT_ITEMS, SAMPLE_INTERVIEW_PROBES as SAMPLE_PROBES } from "@/lib/mock/framework";
 import type { InterviewSession, LiveEvidenceRequest, PillarCode } from "@/types/domain";
 
 const SCORED_PILLARS = PILLARS.filter((p) => p.scored);
+const SCOREABLE_ITEMS = ASSESSMENT_ITEMS.filter((i) => i.pillarCode !== "A");
 
 export function InterviewWorksheet({
   session,
@@ -21,7 +21,8 @@ export function InterviewWorksheet({
   organizationName: string;
 }) {
   const [notes, setNotes] = useState(session.consistencyNotes);
-  const [newRequest, setNewRequest] = useState("");
+  const [newRequestItemId, setNewRequestItemId] = useState(SCOREABLE_ITEMS[0]?.id ?? "");
+  const [newRequestNote, setNewRequestNote] = useState("");
   const [requests, setRequests] = useState(liveEvidenceRequests);
   const [isPending, startTransition] = useTransition();
 
@@ -33,28 +34,29 @@ export function InterviewWorksheet({
   }
 
   function submitRequest() {
-    if (!newRequest.trim()) return;
+    if (!newRequestItemId) return;
+    const item = SCOREABLE_ITEMS.find((i) => i.id === newRequestItemId);
     startTransition(async () => {
-      await addLiveEvidenceRequest(session.applicationId, newRequest.trim());
+      await addLiveEvidenceRequest(session.applicationId, newRequestItemId, newRequestNote || undefined);
       setRequests((prev) => [
         ...prev,
         {
           id: `local-${Date.now()}`,
           interviewSessionId: session.id,
           applicationId: session.applicationId,
-          description: newRequest.trim(),
+          description: item ? `${item.id} — ${item.evidenceName ?? item.prompt}` : newRequestItemId,
           requestedAt: new Date().toISOString(),
           deadline: new Date(Date.now() + 5 * 86400000).toISOString(),
           receivedAt: null,
         },
       ]);
-      setNewRequest("");
+      setNewRequestNote("");
     });
   }
 
   function markReceived(id: string) {
     startTransition(async () => {
-      await markEvidenceReceived(id);
+      await markEvidenceReceived(id, session.applicationId);
       setRequests((prev) => prev.map((r) => (r.id === id ? { ...r, receivedAt: new Date().toISOString() } : r)));
     });
   }
@@ -92,9 +94,21 @@ export function InterviewWorksheet({
 
       <div>
         <div className="text-xs font-bold text-[#AEB1BC] mb-2.5">LIVE EVIDENCE REQUESTS</div>
-        <div className="flex gap-2 mb-3">
-          <Input placeholder="e.g. Updated org chart" value={newRequest} onChange={(e) => setNewRequest(e.target.value)} className="flex-1" />
-          <Button variant="secondary" size="sm" onClick={submitRequest} disabled={isPending || !newRequest.trim()}>
+        <div className="flex flex-col sm:flex-row gap-2 mb-3">
+          <Select value={newRequestItemId} onChange={(e) => setNewRequestItemId(e.target.value)} className="flex-1">
+            {SCOREABLE_ITEMS.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.id} — {item.evidenceName ?? item.prompt}
+              </option>
+            ))}
+          </Select>
+          <Input
+            placeholder="Note (optional)"
+            value={newRequestNote}
+            onChange={(e) => setNewRequestNote(e.target.value)}
+            className="flex-1"
+          />
+          <Button variant="secondary" size="sm" onClick={submitRequest} disabled={isPending || !newRequestItemId}>
             + Request
           </Button>
         </div>

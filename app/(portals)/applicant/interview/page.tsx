@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getApplicationForApplicantUser } from "@/lib/data/applications";
-import { getBookableSlotsForApplication, getBookedSlotForApplication, getInterviewSession } from "@/lib/data/interviews";
+import { getInterviewSession } from "@/lib/data/interviews";
 import { InterviewBooking } from "@/components/applicant/InterviewBooking";
 
 export default async function ApplicantInterviewPage() {
@@ -11,19 +11,7 @@ export default async function ApplicantInterviewPage() {
   const application = await getApplicationForApplicantUser(user.id);
   if (!application) redirect("/applicant/profile");
 
-  const [slots, bookedSlot, session] = await Promise.all([
-    getBookableSlotsForApplication(application.id),
-    getBookedSlotForApplication(application.id),
-    getInterviewSession(application.id),
-  ]);
+  const session = await getInterviewSession(application.id);
 
-  return (
-    <InterviewBooking
-      applicationId={application.id}
-      organizationName={application.organization.name}
-      slots={slots}
-      bookedSlot={bookedSlot}
-      interviewRequested={!!session}
-    />
-  );
+  return <InterviewBooking session={session} />;
 }

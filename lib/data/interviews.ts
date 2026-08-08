@@ -1,39 +1,106 @@
-import { store } from "@/lib/mock/store";
-import type { InterviewAvailabilitySlot, InterviewSession, LiveEvidenceRequest, PillarCode } from "@/types/domain";
+import { createClient } from "@/lib/supabase/server";
+import { ASSESSMENT_ITEMS } from "@/lib/mock/framework";
+import type { InterviewSession, InterviewStatus, LiveEvidenceRequest, PillarCode } from "@/types/domain";
 
-export async function getInterviewSession(applicationId: string): Promise<InterviewSession | null> {
-  return store.interviewSessions.find((s) => s.applicationId === applicationId) ?? null;
+const ITEM_BY_DB_ID = new Map(ASSESSMENT_ITEMS.map((i) => [i.dbId, i]));
+
+interface InterviewRow {
+  id: string;
+  application_id: string;
+  panel_id: string;
+  requested_by: string;
+  requested_at: string;
+  scheduled_at: string | null;
+  format: "virtual" | "physical";
+  status: InterviewStatus;
+  consistency_notes: Partial<Record<PillarCode, string>>;
+  probe_questions: Partial<Record<PillarCode, string>>;
+  initial_email_sent_at: string | null;
+  last_booking_reminder_at: string | null;
+  last_attendance_reminder_at: string | null;
 }
 
-export async function getJurorAvailability(jurorId: string): Promise<InterviewAvailabilitySlot[]> {
-  return store.availability.filter((s) => s.jurorId === jurorId);
+async function mapSession(supabase: Awaited<ReturnType<typeof createClient>>, row: InterviewRow): Promise<InterviewSession> {
+  const { data: participants } = await supabase
+    .from("interview_participants")
+    .select("juror_id")
+    .eq("interview_id", row.id);
+  return {
+    id: row.id,
+    applicationId: row.application_id,
+    panelId: row.panel_id,
+    assignedJurorIds: (participants ?? []).map((p) => p.juror_id),
+    scheduledAt: row.scheduled_at,
+    format: row.format,
+    status: row.status,
+    consistencyNotes: row.consistency_notes ?? {},
+    probeQuestions: row.probe_questions ?? {},
+    requestedAt: row.requested_at,
+    requestedByJurorId: row.requested_by,
+    initialEmailSentAt: row.initial_email_sent_at,
+    lastBookingReminderAt: row.last_booking_reminder_at,
+    lastAttendanceReminderAt: row.last_attendance_reminder_at,
+  };
+}
+
+export async function getInterviewSession(applicationId: string): Promise<InterviewSession | null> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("interviews").select("*").eq("application_id", applicationId).maybeSingle();
+  if (!data) return null;
+  return mapSession(supabase, data as InterviewRow);
 }
 
 /**
- * Open (unbooked) slots published by either of this applicant's two
- * assigned interview jurors (doc section 11.3: min 2 jurors per
- * interview, one of whom didn't do the Stage 2a review). Empty until an
- * InterviewSession exists — booking is per-applicant and juror-initiated,
- * not tied to any general application-status change.
+ * Interviews assigned to this juror, awaiting a scheduled time — real
+ * schema has no availability-slot/booking table at all, and applicants
+ * have no write access to `interviews` under RLS (verified directly),
+ * so there's no self-service booking flow to build against. This
+ * replaces the mock's "publish availability slots" page: coordination
+ * happens off-platform (email/phone), and the juror records the agreed
+ * time here.
  */
-export async function getBookableSlotsForApplication(applicationId: string): Promise<InterviewAvailabilitySlot[]> {
-  const session = await getInterviewSession(applicationId);
-  if (!session || session.status !== "awaiting_booking") return [];
-  return store.availability.filter((s) => session.assignedJurorIds.includes(s.jurorId) && !s.booked);
-}
+export async function getUnscheduledInterviewsForJuror(jurorId: string): Promise<InterviewSession[]> {
+  const supabase = await createClient();
+  const { data: memberships } = await supabase.from("interview_participants").select("interview_id").eq("juror_id", jurorId);
+  const interviewIds = (memberships ?? []).map((m) => m.interview_id);
+  if (interviewIds.length === 0) return [];
 
-export async function getBookedSlotForApplication(applicationId: string): Promise<InterviewAvailabilitySlot | null> {
-  return store.availability.find((s) => s.bookedByApplicationId === applicationId) ?? null;
+  const { data } = await supabase.from("interviews").select("*").in("id", interviewIds).eq("status", "requested");
+  return Promise.all((data ?? []).map((row) => mapSession(supabase, row as InterviewRow)));
 }
 
 export async function getLiveEvidenceRequests(applicationId: string): Promise<LiveEvidenceRequest[]> {
-  return store.liveEvidenceRequests.filter((r) => r.applicationId === applicationId);
+  const supabase = await createClient();
+  const { data: interview } = await supabase.from("interviews").select("id").eq("application_id", applicationId).maybeSingle();
+  if (!interview) return [];
+
+  const { data } = await supabase
+    .from("interview_evidence_requests")
+    .select("id, item_id, requested_at, deadline_at, fulfilled_at, notes")
+    .eq("interview_id", interview.id);
+  return (data ?? []).map((r) => {
+    const item = ITEM_BY_DB_ID.get(r.item_id);
+    return {
+      id: r.id,
+      interviewSessionId: interview.id,
+      applicationId,
+      description: item ? `${item.id} — ${item.evidenceName ?? item.prompt}` : (r.notes ?? "Requested document"),
+      requestedAt: r.requested_at,
+      deadline: r.deadline_at,
+      receivedAt: r.fulfilled_at,
+    };
+  });
 }
 
 /** Which jurors on this application's panel already did a Stage 2a document review — used to satisfy the "one non-2a-reviewer" interview-panel rule. */
 export async function getStage2aReviewerIds(applicationId: string): Promise<string[]> {
-  const documentIds = new Set(store.documents.filter((d) => d.applicationId === applicationId).map((d) => d.id));
-  return Array.from(new Set(store.documentVerifications.filter((v) => documentIds.has(v.documentId)).map((v) => v.jurorId)));
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("stage2_document_reviews")
+    .select("juror_id")
+    .eq("application_id", applicationId)
+    .not("credible", "is", null);
+  return Array.from(new Set((data ?? []).map((r) => r.juror_id)));
 }
 
 const REMINDER_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -47,30 +114,26 @@ export interface ReminderCandidate {
   applicationId: string;
 }
 
-/** Interview sessions awaiting booking, due for a reminder (not sent in the last 24h) — consumed by app/api/cron/interview-reminders. */
+/** Interview sessions requested but not yet scheduled, due for a reminder (not sent in the last 24h) — consumed by app/api/cron/interview-reminders. */
 export async function getBookingReminderCandidates(): Promise<ReminderCandidate[]> {
-  return store.interviewSessions
-    .filter((s) => s.status === "awaiting_booking")
-    .filter((s) => dueForReminder(s.lastBookingReminderAt))
-    .map((s) => ({ applicationId: s.applicationId }));
+  const supabase = await createClient();
+  const { data } = await supabase.from("interviews").select("application_id, last_booking_reminder_at").eq("status", "requested");
+  return (data ?? [])
+    .filter((s) => dueForReminder(s.last_booking_reminder_at))
+    .map((s) => ({ applicationId: s.application_id }));
 }
 
-/** Scheduled interviews whose slot is still upcoming, due for a reminder. There's no explicit "attended" flag, so a slot moving into the past is the cutoff — see lib/actions/interviews.ts's sendAttendanceReminder. */
+/** Scheduled interviews whose slot is still upcoming, due for a reminder. */
 export async function getAttendanceReminderCandidates(): Promise<ReminderCandidate[]> {
-  const now = Date.now();
-  return store.interviewSessions
-    .filter((s) => s.status === "scheduled" && s.scheduledAt && new Date(s.scheduledAt).getTime() >= now)
-    .filter((s) => dueForReminder(s.lastAttendanceReminderAt))
-    .map((s) => ({ applicationId: s.applicationId }));
+  const supabase = await createClient();
+  const now = new Date().toISOString();
+  const { data } = await supabase
+    .from("interviews")
+    .select("application_id, last_attendance_reminder_at")
+    .eq("status", "scheduled")
+    .gte("scheduled_at", now);
+  return (data ?? [])
+    .filter((s) => dueForReminder(s.last_attendance_reminder_at))
+    .map((s) => ({ applicationId: s.application_id }));
 }
 
-export const SAMPLE_PROBES: Record<Exclude<PillarCode, "A">, string> = {
-  B: "Walk us through the last time your Board/advisory body reviewed its own performance — what changed as a result?",
-  C: "Describe how a recent performance appraisal cycle actually ran, from setting objectives to the final review conversation.",
-  D: "Tell us about the last significant issue raised through your employee voice mechanism, and how it was resolved.",
-  E: "Show us (screen-share) the HR system in use, or describe what changed for employees since it was introduced.",
-  F: "What is one number you track monthly to know whether the organisation is performing, and who reviews it?",
-  G: "Describe your most recent CSR/ESG initiative end-to-end — what problem it addressed and what changed.",
-  H: "Talk us through your most recent workplace safety incident or near-miss, and what came out of the review.",
-  I: "How does your organisation actually verify a new employee's or intern's age and eligibility to work?",
-};

@@ -1,111 +1,57 @@
-"use client";
+import { formatDate } from "@/lib/utils";
+import type { InterviewSession } from "@/types/domain";
 
-import { useMemo, useState, useTransition } from "react";
-import { Button } from "@/components/ui/Button";
-import { cn, formatDate } from "@/lib/utils";
-import { bookInterviewSlot } from "@/lib/actions/interviews";
-import type { InterviewAvailabilitySlot } from "@/types/domain";
-
-export function InterviewBooking({
-  applicationId,
-  organizationName,
-  slots,
-  bookedSlot,
-  interviewRequested,
-}: {
-  applicationId: string;
-  organizationName: string;
-  slots: InterviewAvailabilitySlot[];
-  bookedSlot: InterviewAvailabilitySlot | null;
-  interviewRequested: boolean;
-}) {
-  const dates = useMemo(() => Array.from(new Set(slots.map((s) => s.date))).sort(), [slots]);
-  const [selectedDate, setSelectedDate] = useState(dates[0]);
-  const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
-  const [confirmed, setConfirmed] = useState(bookedSlot);
-  const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-
-  const slotsForDate = slots.filter((s) => s.date === selectedDate);
-  const selectedSlot = slots.find((s) => s.id === selectedSlotId);
-
-  function confirm() {
-    if (!selectedSlot) return;
-    setError(null);
-    startTransition(async () => {
-      const result = await bookInterviewSlot(applicationId, selectedSlot.id, organizationName);
-      if (result.success) setConfirmed(selectedSlot);
-      else setError(result.error ?? "Could not book that slot.");
-    });
-  }
-
-  if (confirmed) {
+/**
+ * Read-only status view — applicants have no write access to `interviews`
+ * under RLS, and the real schema has no availability-slot/booking table
+ * at all, so there's no self-service booking flow to build here.
+ * Scheduling coordination happens off-platform (email/phone); a juror on
+ * the panel records the agreed time once it's set.
+ */
+export function InterviewBooking({ session }: { session: InterviewSession | null }) {
+  if (!session) {
     return (
       <div className="max-w-2xl mx-auto px-6 py-14 text-center">
-        <div className="w-16 h-16 rounded-full bg-[#E6F4E6] flex items-center justify-center text-2xl text-success mx-auto mb-5">✓</div>
-        <h1 className="font-heading font-extrabold text-xl text-navy">Interview confirmed</h1>
+        <h1 className="font-heading font-extrabold text-xl text-navy">No interview requested yet</h1>
         <p className="text-sm text-text-muted mt-2">
-          {formatDate(confirmed.date)} · {confirmed.startTime}–{confirmed.endTime} (WAT)
+          Your sector&rsquo;s jury panel hasn&rsquo;t requested an interview with you yet. You&rsquo;ll receive an
+          email once one is scheduled.
         </p>
       </div>
     );
   }
 
-  return (
-    <div className="max-w-4xl mx-auto px-6 sm:px-8 py-8 sm:py-9">
-      <h1 className="font-heading font-extrabold text-xl sm:text-[21px] text-navy mb-1">Book your panel interview</h1>
-      <p className="text-[13px] text-text-muted mb-6">45–60 minute slot with your sector panel. All times WAT.</p>
+  if (session.status === "scheduled" && session.scheduledAt) {
+    return (
+      <div className="max-w-2xl mx-auto px-6 py-14 text-center">
+        <div className="w-16 h-16 rounded-full bg-[#E6F4E6] flex items-center justify-center text-2xl text-success mx-auto mb-5">✓</div>
+        <h1 className="font-heading font-extrabold text-xl text-navy">Interview scheduled</h1>
+        <p className="text-sm text-text-muted mt-2">
+          {formatDate(session.scheduledAt)} — {session.format === "virtual" ? "virtual" : "in person"}
+        </p>
+        <p className="text-xs text-text-muted mt-4">
+          Your panel will be in touch with the meeting details ahead of time.
+        </p>
+      </div>
+    );
+  }
 
-      {dates.length === 0 ? (
-        <div className="text-sm text-text-muted border border-border rounded-2xl p-6">
-          {interviewRequested
-            ? "Your interview has been requested, but no slots are open yet. Check back soon."
-            : "Your sector's jury panel hasn't requested an interview with you yet. You'll receive an email once one is available to book."}
-        </div>
-      ) : (
-        <div className="flex flex-col sm:flex-row gap-8">
-          <div className="flex-1">
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {dates.map((date) => (
-                <button
-                  key={date}
-                  onClick={() => {
-                    setSelectedDate(date);
-                    setSelectedSlotId(null);
-                  }}
-                  className={cn(
-                    "flex-shrink-0 text-sm font-semibold px-4 py-2.5 rounded-xl",
-                    date === selectedDate ? "bg-navy text-white" : "bg-bg text-text"
-                  )}
-                >
-                  {formatDate(date)}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="sm:w-80">
-            <div className="font-bold text-sm mb-3.5">{formatDate(selectedDate)} — available times</div>
-            <div className="flex flex-col gap-2.5">
-              {slotsForDate.map((slot) => (
-                <button
-                  key={slot.id}
-                  onClick={() => setSelectedSlotId(slot.id)}
-                  className={cn(
-                    "text-left border-[1.5px] rounded-xl px-4 py-3.5 text-sm",
-                    slot.id === selectedSlotId ? "border-navy bg-[#F1F1FB] text-navy font-semibold" : "border-[#E3E4EA]"
-                  )}
-                >
-                  {slot.startTime}–{slot.endTime}
-                </button>
-              ))}
-            </div>
-            {error && <div className="text-sm text-error mt-3">{error}</div>}
-            <Button variant="gold" className="w-full mt-6" disabled={!selectedSlot || isPending} onClick={confirm}>
-              {selectedSlot ? `Confirm ${selectedSlot.startTime} slot` : "Select a time"}
-            </Button>
-          </div>
-        </div>
-      )}
+  if (session.status === "completed") {
+    return (
+      <div className="max-w-2xl mx-auto px-6 py-14 text-center">
+        <h1 className="font-heading font-extrabold text-xl text-navy">Interview complete</h1>
+        <p className="text-sm text-text-muted mt-2">Thank you for meeting with your sector&rsquo;s jury panel.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-2xl mx-auto px-6 py-14 text-center">
+      <h1 className="font-heading font-extrabold text-xl text-navy">Interview requested</h1>
+      <p className="text-sm text-text-muted mt-2">
+        Your sector&rsquo;s jury panel has requested an interview with you. They&rsquo;ll reach out directly to agree
+        a time — no action is needed here yet.
+      </p>
     </div>
   );
 }

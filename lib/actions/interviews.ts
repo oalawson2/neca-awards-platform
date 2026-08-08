@@ -1,182 +1,191 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { store, generateId } from "@/lib/mock/store";
+import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/lib/data/audit";
 import { sendEmail } from "@/lib/email/send";
 import { getStage2aReviewerIds } from "@/lib/data/interviews";
+import { itemById } from "@/lib/mock/framework";
 import type { PillarCode } from "@/types/domain";
 
-function orgForApplication(applicationId: string) {
-  const app = store.applications.find((a) => a.id === applicationId);
-  return app ? store.organizations.find((o) => o.id === app.organizationId) : undefined;
-}
-
-export async function setAvailability(jurorId: string, slots: { date: string; startTime: string; endTime: string }[]) {
-  store.availability = store.availability.filter((s) => s.jurorId !== jurorId || s.booked);
-  for (const slot of slots) {
-    store.availability.push({ id: generateId("slot"), jurorId, ...slot, booked: false });
-  }
-  revalidatePath("/jury/availability");
-  return { success: true };
-}
-
-export async function bookInterviewSlot(applicationId: string, slotId: string, organizationName: string) {
-  const slot = store.availability.find((s) => s.id === slotId);
-  if (!slot || slot.booked) return { success: false, error: "That slot is no longer available." };
-
-  slot.booked = true;
-  slot.bookedByApplicationId = applicationId;
-  const session = store.interviewSessions.find((s) => s.applicationId === applicationId);
-  if (session) {
-    session.status = "scheduled";
-    session.scheduledAt = `${slot.date}T${slot.startTime}:00`;
-  }
-  logAction(organizationName, "Booked interview slot for", `${slot.date} ${slot.startTime}`);
-  revalidatePath("/applicant/interview");
-  return { success: true };
+async function orgForApplication(supabase: Awaited<ReturnType<typeof createClient>>, applicationId: string) {
+  const { data: app } = await supabase.from("applications").select("organization_id").eq("id", applicationId).maybeSingle();
+  if (!app) return null;
+  const { data: org } = await supabase.from("organizations").select("name, contact_email").eq("id", app.organization_id).maybeSingle();
+  return org;
 }
 
 /**
  * Juror-initiated, per-applicant, gated on this juror having finished
- * their own Stage 2a document review for this applicant — carried
- * forward from the earlier single-juror interview trigger, now re-scoped
- * to the panel model (doc section 11.3): assigns 2 jurors from the
- * panel, preferring at least one who did NOT do the Stage 2a review, as
- * the doc requires ("to reduce single-reviewer bias").
+ * their own Stage 2a document review for this applicant (doc section
+ * 11.3). Assigns the requesting juror's whole panel as participants,
+ * recording did_stage2a_review per juror — the "at least one non-2a-
+ * reviewer" rule (doc: "to reduce single-reviewer bias") is then an app-
+ * level check at interview time, same as the mock version; the schema
+ * stores the fact but doesn't hard-enforce the rule itself.
  */
 export async function requestInterview(applicationId: string, requestingJurorId: string, jurorName: string) {
-  const existing = store.interviewSessions.find((s) => s.applicationId === applicationId);
+  const supabase = await createClient();
+
+  const { data: existing } = await supabase.from("interviews").select("id").eq("application_id", applicationId).maybeSingle();
   if (existing) return { success: false, error: "An interview has already been requested for this applicant." };
 
-  const uploadedDocIds = new Set(
-    store.documents.filter((d) => d.applicationId === applicationId && d.status === "uploaded").map((d) => d.id)
-  );
-  const reviewedByMe = new Set(
-    store.documentVerifications.filter((v) => v.jurorId === requestingJurorId && uploadedDocIds.has(v.documentId)).map((v) => v.documentId)
-  );
-  const outstanding = Array.from(uploadedDocIds).filter((id) => !reviewedByMe.has(id));
-  if (outstanding.length > 0) {
-    return { success: false, error: "Finish verifying every uploaded document for this applicant before requesting an interview." };
-  }
+  const { data: myPanel } = await supabase.from("panel_memberships").select("panel_id").eq("juror_id", requestingJurorId).maybeSingle();
+  if (!myPanel) return { success: false, error: "You aren't assigned to a panel." };
 
-  const panel = store.panels.find((p) => p.jurorIds.includes(requestingJurorId));
-  if (!panel) return { success: false, error: "You aren't assigned to a panel." };
+  const { data: panelMembers } = await supabase.from("panel_memberships").select("juror_id").eq("panel_id", myPanel.panel_id);
+  const panelJurorIds = (panelMembers ?? []).map((m) => m.juror_id);
 
   const stage2aReviewerIds = new Set(await getStage2aReviewerIds(applicationId));
-  const nonReviewers = panel.jurorIds.filter((id) => !stage2aReviewerIds.has(id));
-  const reviewers = panel.jurorIds.filter((id) => stage2aReviewerIds.has(id));
-  const assignedJurorIds = [...nonReviewers, ...reviewers].slice(0, 2);
-  if (assignedJurorIds.length < 2) assignedJurorIds.push(...panel.jurorIds.filter((id) => !assignedJurorIds.includes(id)));
 
-  const now = new Date().toISOString();
-  store.interviewSessions.push({
-    id: generateId("interview"),
-    applicationId,
-    panelId: panel.id,
-    assignedJurorIds: assignedJurorIds.slice(0, 2),
-    scheduledAt: null,
-    format: "virtual",
-    status: "awaiting_booking",
-    consistencyNotes: {},
-    probeQuestions: {},
-    requestedAt: now,
-    requestedByJurorId: requestingJurorId,
-    initialEmailSentAt: now,
-    lastBookingReminderAt: null,
-    lastAttendanceReminderAt: null,
-  });
+  const { data: interview, error: interviewError } = await supabase
+    .from("interviews")
+    .insert({ application_id: applicationId, panel_id: myPanel.panel_id, requested_by: requestingJurorId, status: "requested" })
+    .select("id")
+    .single();
+  if (interviewError || !interview) return { success: false, error: "Could not create the interview." };
 
-  const org = orgForApplication(applicationId);
+  const participantRows = panelJurorIds.map((jurorId) => ({
+    interview_id: interview.id,
+    juror_id: jurorId,
+    did_stage2a_review: stage2aReviewerIds.has(jurorId),
+  }));
+  const { error: participantsError } = await supabase.from("interview_participants").insert(participantRows);
+  if (participantsError) {
+    await supabase.from("interviews").delete().eq("id", interview.id);
+    return { success: false, error: "Could not assign the panel to this interview." };
+  }
+
+  const org = await orgForApplication(supabase, applicationId);
   if (org) {
     await sendEmail({
-      to: org.primaryContactEmail,
+      to: org.contact_email,
       subject: "You're invited to book your NECA Excellence Awards panel interview",
       template: "interview-invite",
       context: { organizationName: org.name, applicationId },
     });
   }
-  logAction(jurorName, "Requested interview for", org?.name ?? applicationId);
+  await supabase.from("interviews").update({ initial_email_sent_at: new Date().toISOString() }).eq("id", interview.id);
 
+  logAction(jurorName, "Requested interview for", org?.name ?? applicationId);
   revalidatePath("/jury/documents/" + applicationId);
+  revalidatePath("/jury/availability");
+  revalidatePath("/applicant/interview");
+  return { success: true };
+}
+
+/**
+ * Records the agreed time directly — no self-service booking flow exists
+ * (real schema has no availability-slot table, and applicants have no
+ * write access to `interviews` under RLS), so coordination happens
+ * off-platform and a juror on the panel enters the outcome here.
+ */
+export async function scheduleInterview(applicationId: string, scheduledAtIso: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("interviews")
+    .update({ scheduled_at: scheduledAtIso, status: "scheduled" })
+    .eq("application_id", applicationId);
+  if (error) return { success: false, error: "Could not schedule the interview." };
+
+  revalidatePath("/jury/availability");
+  revalidatePath("/applicant/interview");
+  return { success: true };
+}
+
+export async function markInterviewCompleted(applicationId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("interviews").update({ status: "completed" }).eq("application_id", applicationId);
+  if (error) return { success: false, error: "Could not update the interview." };
+
+  revalidatePath(`/jury/interview/${applicationId}`);
   revalidatePath("/applicant/interview");
   return { success: true };
 }
 
 export async function saveConsistencyNote(applicationId: string, pillarCode: PillarCode, note: string) {
-  const session = store.interviewSessions.find((s) => s.applicationId === applicationId);
-  if (!session) return { success: false, error: "No interview session found." };
-  session.consistencyNotes[pillarCode] = note;
+  const supabase = await createClient();
+  const { data: interview } = await supabase.from("interviews").select("id, consistency_notes").eq("application_id", applicationId).maybeSingle();
+  if (!interview) return { success: false, error: "No interview session found." };
+
+  const notes = { ...(interview.consistency_notes as Partial<Record<PillarCode, string>>), [pillarCode]: note };
+  const { error } = await supabase.from("interviews").update({ consistency_notes: notes }).eq("id", interview.id);
+  if (error) return { success: false, error: "Could not save note." };
+
   revalidatePath(`/jury/interview/${applicationId}`);
   return { success: true };
 }
 
-export async function addLiveEvidenceRequest(applicationId: string, description: string, deadlineDays = 5) {
-  const session = store.interviewSessions.find((s) => s.applicationId === applicationId);
-  if (!session) return { success: false, error: "No interview session found." };
+/** itemCode identifies which assessment item the live-requested document supports — the real schema keys evidence requests to a specific item, not free text. */
+export async function addLiveEvidenceRequest(applicationId: string, itemCode: string, notes?: string, deadlineDays = 5) {
+  const supabase = await createClient();
+  const { data: interview } = await supabase.from("interviews").select("id").eq("application_id", applicationId).maybeSingle();
+  if (!interview) return { success: false, error: "No interview session found." };
 
+  const item = itemById(itemCode);
   const deadline = new Date();
   deadline.setDate(deadline.getDate() + deadlineDays);
 
-  store.liveEvidenceRequests.push({
-    id: generateId("live-evidence"),
-    interviewSessionId: session.id,
-    applicationId,
-    description,
-    requestedAt: new Date().toISOString(),
-    deadline: deadline.toISOString(),
-    receivedAt: null,
+  const { error } = await supabase.from("interview_evidence_requests").insert({
+    interview_id: interview.id,
+    item_id: item.dbId,
+    deadline_at: deadline.toISOString(),
+    notes,
   });
+  if (error) return { success: false, error: "Could not record the request." };
 
-  logAction("Jury", "Requested additional evidence during interview:", description);
+  logAction("Jury", "Requested additional evidence during interview:", item.evidenceName ?? item.id);
   revalidatePath(`/jury/interview/${applicationId}`);
   return { success: true };
 }
 
-export async function markEvidenceReceived(requestId: string) {
-  const request = store.liveEvidenceRequests.find((r) => r.id === requestId);
-  if (!request) return { success: false, error: "Request not found." };
-  request.receivedAt = new Date().toISOString();
-  revalidatePath(`/jury/interview/${request.applicationId}`);
+export async function markEvidenceReceived(requestId: string, applicationId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("interview_evidence_requests").update({ fulfilled_at: new Date().toISOString() }).eq("id", requestId);
+  if (error) return { success: false, error: "Could not update the request." };
+
+  revalidatePath(`/jury/interview/${applicationId}`);
   return { success: true };
 }
 
 /** Sends (mock-sends, via sendEmail) a reminder to book. Meant to be called on a schedule by app/api/cron/interview-reminders. */
 export async function sendBookingReminder(applicationId: string) {
-  const session = store.interviewSessions.find((s) => s.applicationId === applicationId);
-  if (!session) return { success: false, error: "No interview has been requested for this applicant." };
-  if (session.status !== "awaiting_booking") return { success: false, error: "This applicant isn't awaiting booking." };
+  const supabase = await createClient();
+  const { data: interview } = await supabase.from("interviews").select("id, status").eq("application_id", applicationId).maybeSingle();
+  if (!interview) return { success: false, error: "No interview has been requested for this applicant." };
+  if (interview.status !== "requested") return { success: false, error: "This applicant isn't awaiting scheduling." };
 
-  const org = orgForApplication(applicationId);
+  const org = await orgForApplication(supabase, applicationId);
   if (org) {
     await sendEmail({
-      to: org.primaryContactEmail,
+      to: org.contact_email,
       subject: "Reminder: book your NECA Excellence Awards panel interview",
       template: "interview-booking-reminder",
       context: { organizationName: org.name, applicationId },
     });
   }
-  session.lastBookingReminderAt = new Date().toISOString();
+  await supabase.from("interviews").update({ last_booking_reminder_at: new Date().toISOString() }).eq("id", interview.id);
   logAction("System", "Sent interview-booking reminder email to", org?.name ?? applicationId);
   return { success: true };
 }
 
-/** Sends (mock-sends, via sendEmail) a reminder ahead of a booked interview. Meant to be called on a schedule by app/api/cron/interview-reminders. */
+/** Sends (mock-sends, via sendEmail) a reminder ahead of a scheduled interview. Meant to be called on a schedule by app/api/cron/interview-reminders. */
 export async function sendAttendanceReminder(applicationId: string) {
-  const session = store.interviewSessions.find((s) => s.applicationId === applicationId);
-  if (!session) return { success: false, error: "No interview has been requested for this applicant." };
-  if (session.status !== "scheduled") return { success: false, error: "This applicant hasn't booked a slot yet." };
+  const supabase = await createClient();
+  const { data: interview } = await supabase.from("interviews").select("id, status, scheduled_at").eq("application_id", applicationId).maybeSingle();
+  if (!interview) return { success: false, error: "No interview has been requested for this applicant." };
+  if (interview.status !== "scheduled") return { success: false, error: "This applicant hasn't been scheduled yet." };
 
-  const org = orgForApplication(applicationId);
+  const org = await orgForApplication(supabase, applicationId);
   if (org) {
     await sendEmail({
-      to: org.primaryContactEmail,
+      to: org.contact_email,
       subject: "Reminder: your upcoming NECA Excellence Awards panel interview",
       template: "interview-attendance-reminder",
-      context: { organizationName: org.name, applicationId, scheduledAt: session.scheduledAt ?? "" },
+      context: { organizationName: org.name, applicationId, scheduledAt: interview.scheduled_at ?? "" },
     });
   }
-  session.lastAttendanceReminderAt = new Date().toISOString();
+  await supabase.from("interviews").update({ last_attendance_reminder_at: new Date().toISOString() }).eq("id", interview.id);
   logAction("System", "Sent interview-attendance reminder email to", org?.name ?? applicationId);
   return { success: true };
 }

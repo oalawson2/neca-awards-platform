@@ -415,7 +415,8 @@ export interface ShortlistConfig {
 // Stage 2b — sector interview (doc section 11.3)
 // ===========================================================================
 
-export type InterviewStatus = "not_requested" | "awaiting_booking" | "scheduled" | "completed";
+/** Matches the real interview_status enum exactly. "No interview row exists yet" (not a stored value) is this codebase's "not requested" state. */
+export type InterviewStatus = "requested" | "scheduled" | "completed" | "no_show" | "cancelled";
 
 export interface InterviewSession {
   id: string;

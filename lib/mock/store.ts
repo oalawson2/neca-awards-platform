@@ -77,12 +77,17 @@ function nowIso(offsetDays = 0) {
 }
 
 /**
- * NECA has not supplied their real sector list yet. These three names are
- * deliberately generic/synthetic — never mistake them for real NECA
- * sectors — and exist only so the rest of the mock data (applications,
- * panel assignments, shortlist config) has something to attach to. The
- * Secretariat sector-management screen (Phase-later) is where real
- * sectors get added; this seed is not a stand-in for that data entry.
+ * The real 21-category/183-sector taxonomy is already seeded in the live
+ * Supabase database (sector_categories + sectors tables), but this
+ * sandbox's network egress is blocked from reaching that project (proxy
+ * denies the host outright), so those real names can't be pulled in
+ * here — and they're deliberately not fabricated. These three
+ * placeholder names are synthetic on purpose — never mistake them for
+ * real NECA sectors — and exist only so the rest of the mock data
+ * (applications, panel assignments, shortlist config) has something to
+ * attach to while the app still runs in mock mode. Once Section 14's
+ * real Supabase integration is live, sector reads come straight from the
+ * database and this seed becomes irrelevant for that purpose.
  */
 const SECTORS: Sector[] = [
   { id: "sector-placeholder-a", name: "Placeholder Sector A", order: 1 },

@@ -3,15 +3,17 @@ import { cookies } from "next/headers";
 
 /**
  * Supabase client for use in Server Components, Route Handlers, and Server Actions.
- * Requires NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY
- * to be set once the Supabase project exists (see .env.example).
+ * Requires NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+ * (see .env.example) — RLS still applies with this key; it identifies the
+ * request as the signed-in user via their session cookie, same as the
+ * browser client.
  */
 export async function createClient() {
   const cookieStore = await cookies();
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
       cookies: {
         getAll() {

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { setShortlistConfig, applyShortlist } from "@/lib/actions/shortlisting";
 import type { ShortlistCategory } from "@/lib/data/shortlisting";
+import { ORG_SIZE_LABELS } from "@/types/domain";
 import type { ShortlistMode } from "@/types/domain";
 
 export function ShortlistCategoryCard({ category }: { category: ShortlistCategory }) {
@@ -19,7 +20,7 @@ export function ShortlistCategoryCard({ category }: { category: ShortlistCategor
     setError(null);
     setMessage(null);
     startTransition(async () => {
-      const result = await setShortlistConfig(category.sectorId, mode, value);
+      const result = await setShortlistConfig(category.sectorId, category.sizeTier, mode, value);
       if (!result.success) setError(result.error ?? "Could not save.");
       else setMessage("Saved.");
     });
@@ -29,7 +30,7 @@ export function ShortlistCategoryCard({ category }: { category: ShortlistCategor
     setError(null);
     setMessage(null);
     startTransition(async () => {
-      const result = await applyShortlist(category.sectorId);
+      const result = await applyShortlist(category.sectorId, category.sizeTier);
       if (!result.success) setError(result.error ?? "Could not apply shortlist.");
       else setMessage("Shortlist applied.");
     });
@@ -39,7 +40,9 @@ export function ShortlistCategoryCard({ category }: { category: ShortlistCategor
     <div className="border border-border rounded-2xl p-5">
       <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
         <div>
-          <div className="font-bold text-sm text-navy-dark">{category.sectorName}</div>
+          <div className="font-bold text-sm text-navy-dark">
+            {category.sectorName} <span className="font-normal text-text-muted">— {ORG_SIZE_LABELS[category.sizeTier]}</span>
+          </div>
           <div className="text-xs text-text-muted">{category.ranked.length} submitted applications</div>
         </div>
         <div className="flex items-center gap-2">

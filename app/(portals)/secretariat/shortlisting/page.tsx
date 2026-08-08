@@ -15,7 +15,7 @@ export default async function ShortlistingPage() {
           sector before applying it; NECA hasn&rsquo;t decided the approach yet (doc section 13).
         </p>
         {categories.map((category) => (
-          <ShortlistCategoryCard key={category.sectorId} category={category} />
+          <ShortlistCategoryCard key={`${category.sectorId}-${category.sizeTier}`} category={category} />
         ))}
         {categories.length === 0 && (
           <div className="text-sm text-text-muted border border-border rounded-2xl p-6">

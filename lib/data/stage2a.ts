@@ -38,3 +38,18 @@ export async function getRedFlagCount(applicationId: string): Promise<number> {
 export async function isMandatorySecretariatReviewTriggered(applicationId: string): Promise<boolean> {
   return (await getRedFlagCount(applicationId)) >= 3;
 }
+
+export interface DocumentVerificationSummary extends RequiredDocument {
+  credibleCount: number;
+  redFlagCount: number;
+}
+
+/** Secretariat view: every checklist item for an application with the aggregate (not per-juror) verification tally, so a completeness check doesn't need to see any one juror's individual call. */
+export async function getDocumentVerificationSummary(applicationId: string): Promise<DocumentVerificationSummary[]> {
+  const documents = store.documents.filter((d) => d.applicationId === applicationId);
+  return documents.map((doc) => ({
+    ...doc,
+    credibleCount: store.documentVerifications.filter((v) => v.documentId === doc.id && v.credible).length,
+    redFlagCount: store.redFlags.filter((f) => f.documentId === doc.id).length,
+  }));
+}

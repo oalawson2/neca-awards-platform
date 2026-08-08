@@ -1,102 +1,119 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { store, generateId } from "@/lib/mock/store";
+import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/session";
 import { logAction } from "@/lib/data/audit";
 import { buildShortlistedReportContent, buildNonShortlistedReportContent } from "@/lib/data/reports";
+
+export interface ReportActionResult {
+  success: boolean;
+  error?: string;
+}
+
+async function requireSecretariat(): Promise<ReportActionResult | null> {
+  const user = await getCurrentUser();
+  if (!user || (user.role !== "secretariat" && user.role !== "secretariat_super_admin")) {
+    return { success: false, error: "Only Secretariat can manage reports." };
+  }
+  return null;
+}
 
 /**
  * Generates (or regenerates) the report for an applicant — a genuinely
  * different variant depending on whether they were shortlisted, not a
- * lesser version of the same report (doc section 12). Mock generation:
- * deterministic from real score data, since no Anthropic API key exists
- * yet to call for real. Never labeled "AI-generated" anywhere the
- * applicant can see it, carried forward from the earlier decision.
+ * lesser version of the same report (doc section 12). Deterministic from
+ * real score data, since no Anthropic API key exists yet to call for
+ * real. Never labeled "AI-generated" anywhere the applicant can see it.
+ * Upserts into application_reports (task #43's migration) — regenerating
+ * resets status to pending_approval and clears any prior release, since
+ * new content needs a fresh Secretariat review before it's shown again.
  */
-export async function generateReport(applicationId: string) {
-  const app = store.applications.find((a) => a.id === applicationId);
-  if (!app) return { success: false, error: "Application not found." };
-  const org = store.organizations.find((o) => o.id === app.organizationId)!;
+export async function generateReport(applicationId: string): Promise<ReportActionResult> {
+  const denied = await requireSecretariat();
+  if (denied) return denied;
 
-  if (app.isShortlisted) {
+  const supabase = await createClient();
+  const { data: app } = await supabase.from("applications").select("status, organization_id").eq("id", applicationId).maybeSingle();
+  if (!app) return { success: false, error: "Application not found." };
+  const { data: org } = await supabase.from("organizations").select("name").eq("id", app.organization_id).maybeSingle();
+
+  const isShortlisted = app.status !== "not_shortlisted";
+  const kind = isShortlisted ? "shortlisted" : "non_shortlisted";
+
+  let row: { narrative: string | null; strengths: string[]; improvements: string[]; pillarBreakdown: unknown };
+  if (isShortlisted) {
     const content = await buildShortlistedReportContent(applicationId);
-    const existing = store.shortlistedReports.find((r) => r.applicationId === applicationId);
-    if (existing) {
-      Object.assign(existing, content, { status: "pending_approval" });
-    } else {
-      store.shortlistedReports.push({
-        id: generateId("report"),
-        applicationId,
-        status: "pending_approval",
-        ...content,
-        createdAt: new Date().toISOString(),
-        releasedAt: null,
-      });
-    }
+    row = { narrative: content.narrative, strengths: content.strengths, improvements: content.improvements, pillarBreakdown: content.pillarBreakdown };
   } else {
     const content = await buildNonShortlistedReportContent(applicationId);
-    const existing = store.nonShortlistedReports.find((r) => r.applicationId === applicationId);
-    if (existing) {
-      Object.assign(existing, content, { status: "pending_approval" });
-    } else {
-      store.nonShortlistedReports.push({
-        id: generateId("report"),
-        applicationId,
-        status: "pending_approval",
-        ...content,
-        createdAt: new Date().toISOString(),
-        releasedAt: null,
-      });
-    }
+    row = { narrative: null, strengths: [], improvements: [], pillarBreakdown: content.pillarSummary };
   }
 
-  logAction("System", "Generated report for", org.name);
+  const { error } = await supabase.from("application_reports").upsert(
+    {
+      application_id: applicationId,
+      kind,
+      status: "pending_approval",
+      narrative: row.narrative,
+      strengths: row.strengths,
+      improvements: row.improvements,
+      pillar_breakdown: row.pillarBreakdown,
+      reviewed_by: null,
+      reviewed_at: null,
+      released_at: null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "application_id" }
+  );
+  if (error) return { success: false, error: "Could not generate report." };
+
+  logAction("System", "Generated report for", org?.name ?? applicationId);
   revalidatePath("/secretariat/ai-reports");
   revalidatePath(`/secretariat/ai-reports/${applicationId}`);
   return { success: true };
 }
 
-export async function approveAndReleaseReport(applicationId: string, approverName: string) {
-  const app = store.applications.find((a) => a.id === applicationId);
-  if (!app) return { success: false, error: "Application not found." };
-  const org = store.organizations.find((o) => o.id === app.organizationId)!;
+export async function approveAndReleaseReport(applicationId: string, approverName: string): Promise<ReportActionResult> {
+  const denied = await requireSecretariat();
+  if (denied) return denied;
 
+  const user = await getCurrentUser();
+  const supabase = await createClient();
   const now = new Date().toISOString();
-  if (app.isShortlisted) {
-    const report = store.shortlistedReports.find((r) => r.applicationId === applicationId);
-    if (!report) return { success: false, error: "No report to approve — generate one first." };
-    report.status = "approved";
-    report.releasedAt = now;
-  } else {
-    const report = store.nonShortlistedReports.find((r) => r.applicationId === applicationId);
-    if (!report) return { success: false, error: "No report to approve — generate one first." };
-    report.status = "approved";
-    report.releasedAt = now;
-  }
-  // No application.status change here — "released" isn't a real status
-  // value (see NECA_Supabase_Schema_Reference.md's application_status
-  // enum). Release is entirely the report row's own state
-  // (status='approved' + releasedAt), which is what gates applicant
-  // visibility — see app/(portals)/applicant/report/page.tsx.
+  const { data: existing } = await supabase.from("application_reports").select("id").eq("application_id", applicationId).maybeSingle();
+  if (!existing) return { success: false, error: "No report to approve — generate one first." };
 
-  logAction(approverName, "Approved and released report for", org.name);
+  const { error } = await supabase
+    .from("application_reports")
+    .update({ status: "approved", reviewed_by: user?.id, reviewed_at: now, released_at: now, updated_at: now })
+    .eq("id", existing.id);
+  if (error) return { success: false, error: "Could not approve report." };
+
+  const { data: app } = await supabase.from("applications").select("organization_id").eq("id", applicationId).maybeSingle();
+  const { data: org } = app ? await supabase.from("organizations").select("name").eq("id", app.organization_id).maybeSingle() : { data: null };
+
+  logAction(approverName, "Approved and released report for", org?.name ?? applicationId);
   revalidatePath("/secretariat/ai-reports");
   revalidatePath("/applicant/report");
   return { success: true };
 }
 
-export async function sendBackReport(applicationId: string, reviewerName: string) {
-  const app = store.applications.find((a) => a.id === applicationId);
-  if (!app) return { success: false, error: "Application not found." };
-  const org = store.organizations.find((o) => o.id === app.organizationId)!;
+export async function sendBackReport(applicationId: string, reviewerName: string): Promise<ReportActionResult> {
+  const denied = await requireSecretariat();
+  if (denied) return denied;
 
-  const report = app.isShortlisted
-    ? store.shortlistedReports.find((r) => r.applicationId === applicationId)
-    : store.nonShortlistedReports.find((r) => r.applicationId === applicationId);
-  if (!report) return { success: false, error: "No report to send back." };
-  report.status = "sent_back";
+  const supabase = await createClient();
+  const { data: existing } = await supabase.from("application_reports").select("id").eq("application_id", applicationId).maybeSingle();
+  if (!existing) return { success: false, error: "No report to send back." };
 
-  logAction(reviewerName, "Sent report back for revision:", org.name);
+  const { error } = await supabase.from("application_reports").update({ status: "sent_back", updated_at: new Date().toISOString() }).eq("id", existing.id);
+  if (error) return { success: false, error: "Could not send report back." };
+
+  const { data: app } = await supabase.from("applications").select("organization_id").eq("id", applicationId).maybeSingle();
+  const { data: org } = app ? await supabase.from("organizations").select("name").eq("id", app.organization_id).maybeSingle() : { data: null };
+
+  logAction(reviewerName, "Sent report back for revision:", org?.name ?? applicationId);
   revalidatePath("/secretariat/ai-reports");
   return { success: true };
 }

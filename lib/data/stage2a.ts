@@ -1,5 +1,9 @@
-import { store } from "@/lib/mock/store";
-import type { DocumentVerification, RedFlag, RequiredDocument } from "@/types/domain";
+import { createClient } from "@/lib/supabase/server";
+import { ASSESSMENT_ITEMS } from "@/lib/mock/framework";
+import { getDocuments } from "@/lib/data/checklist";
+import type { DocumentVerification, RedFlag, RedFlagReason, RequiredDocument } from "@/types/domain";
+
+const ITEM_BY_CODE = new Map(ASSESSMENT_ITEMS.map((i) => [i.id, i]));
 
 export interface DocumentWithVerification extends RequiredDocument {
   myVerification: DocumentVerification | null;
@@ -8,20 +12,44 @@ export interface DocumentWithVerification extends RequiredDocument {
 
 /**
  * Stage 2a worklist (doc section 11.2): every uploaded document for a
- * shortlisted applicant, since "uploaded" already means the applicant
- * declared Yes / maturity>=3 for that item (see evidenceTriggerFired in
- * lib/scoring/stage1.ts — that's exactly what fired the checklist entry
- * in the first place). Per-juror verification, same reasoning as the
- * rest of Stage 2: one juror's credibility call doesn't leak to another
- * before the panel's scores are reconciled.
+ * shortlisted applicant. Verification (stage2_document_reviews) is keyed
+ * by item, not by the specific uploaded file — matches the real schema
+ * (unique on application_id+item_id+juror_id); red flags key off the
+ * actual document_evidence row instead, which lib/data/checklist.ts's
+ * RequiredDocument.id already resolves to for uploaded items.
  */
 export async function getDocumentsForVerification(applicationId: string, jurorId: string): Promise<DocumentWithVerification[]> {
-  const documents = store.documents.filter((d) => d.applicationId === applicationId && d.status === "uploaded");
-  return documents.map((doc) => ({
-    ...doc,
-    myVerification: store.documentVerifications.find((v) => v.documentId === doc.id && v.jurorId === jurorId) ?? null,
-    myRedFlag: store.redFlags.find((f) => f.documentId === doc.id && f.jurorId === jurorId) ?? null,
-  }));
+  const documents = (await getDocuments(applicationId)).filter((d) => d.status === "uploaded");
+  if (documents.length === 0) return [];
+
+  const supabase = await createClient();
+  const itemDbIds = documents.map((d) => ITEM_BY_CODE.get(d.itemId)!.dbId);
+  const docEvidenceIds = documents.map((d) => d.id);
+  const [{ data: reviews }, { data: flags }] = await Promise.all([
+    supabase
+      .from("stage2_document_reviews")
+      .select("id, item_id, credible, notes, reviewed_at")
+      .eq("application_id", applicationId)
+      .eq("juror_id", jurorId)
+      .in("item_id", itemDbIds),
+    supabase.from("red_flags").select("id, document_evidence_id, reason, notes, created_at").eq("flagged_by", jurorId).in("document_evidence_id", docEvidenceIds),
+  ]);
+
+  return documents.map((doc) => {
+    const item = ITEM_BY_CODE.get(doc.itemId)!;
+    const review = (reviews ?? []).find((r) => r.item_id === item.dbId);
+    const flag = (flags ?? []).find((f) => f.document_evidence_id === doc.id);
+    return {
+      ...doc,
+      myVerification:
+        review && review.credible !== null
+          ? { id: review.id, documentId: doc.id, jurorId, credible: review.credible, note: review.notes ?? undefined, reviewedAt: review.reviewed_at ?? "" }
+          : null,
+      myRedFlag: flag
+        ? { id: flag.id, documentId: doc.id, jurorId, reason: flag.reason as RedFlagReason, note: flag.notes ?? undefined, createdAt: flag.created_at }
+        : null,
+    };
+  });
 }
 
 export async function getOutstandingVerifications(applicationId: string, jurorId: string): Promise<RequiredDocument[]> {
@@ -29,10 +57,14 @@ export async function getOutstandingVerifications(applicationId: string, jurorId
   return documents.filter((d) => !d.myVerification);
 }
 
-/** Doc section 11.2/11.4: "3+ red flags across an application triggers mandatory Secretariat review" — computed live, not stored, since it's a pure function of the red flags already on record. */
+/**
+ * applications.red_flag_count is auto-synced by a DB trigger on red_flags
+ * insert/delete — read it directly rather than counting rows ourselves.
+ */
 export async function getRedFlagCount(applicationId: string): Promise<number> {
-  const documentIds = new Set(store.documents.filter((d) => d.applicationId === applicationId).map((d) => d.id));
-  return store.redFlags.filter((f) => documentIds.has(f.documentId)).length;
+  const supabase = await createClient();
+  const { data } = await supabase.from("applications").select("red_flag_count").eq("id", applicationId).maybeSingle();
+  return data?.red_flag_count ?? 0;
 }
 
 export async function isMandatorySecretariatReviewTriggered(applicationId: string): Promise<boolean> {
@@ -44,12 +76,27 @@ export interface DocumentVerificationSummary extends RequiredDocument {
   redFlagCount: number;
 }
 
-/** Secretariat view: every checklist item for an application with the aggregate (not per-juror) verification tally, so a completeness check doesn't need to see any one juror's individual call. */
+/** Secretariat view: every checklist item with the aggregate (not per-juror) verification tally. */
 export async function getDocumentVerificationSummary(applicationId: string): Promise<DocumentVerificationSummary[]> {
-  const documents = store.documents.filter((d) => d.applicationId === applicationId);
-  return documents.map((doc) => ({
-    ...doc,
-    credibleCount: store.documentVerifications.filter((v) => v.documentId === doc.id && v.credible).length,
-    redFlagCount: store.redFlags.filter((f) => f.documentId === doc.id).length,
-  }));
+  const documents = await getDocuments(applicationId);
+  if (documents.length === 0) return [];
+
+  const supabase = await createClient();
+  const itemDbIds = documents.map((d) => ITEM_BY_CODE.get(d.itemId)!.dbId);
+  const docEvidenceIds = documents.filter((d) => d.status === "uploaded").map((d) => d.id);
+  const [{ data: reviews }, { data: flags }] = await Promise.all([
+    supabase.from("stage2_document_reviews").select("item_id, credible").eq("application_id", applicationId).in("item_id", itemDbIds),
+    docEvidenceIds.length
+      ? supabase.from("red_flags").select("document_evidence_id").in("document_evidence_id", docEvidenceIds)
+      : Promise.resolve({ data: [] as { document_evidence_id: string }[] }),
+  ]);
+
+  return documents.map((doc) => {
+    const item = ITEM_BY_CODE.get(doc.itemId)!;
+    return {
+      ...doc,
+      credibleCount: (reviews ?? []).filter((r) => r.item_id === item.dbId && r.credible).length,
+      redFlagCount: (flags ?? []).filter((f) => f.document_evidence_id === doc.id).length,
+    };
+  });
 }

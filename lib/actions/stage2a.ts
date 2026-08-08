@@ -1,63 +1,86 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { store, generateId } from "@/lib/mock/store";
+import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/lib/data/audit";
-import { getRedFlagCount } from "@/lib/data/stage2a";
 import type { RedFlagReason } from "@/types/domain";
 
-function upsertVerification(documentId: string, jurorId: string, credible: boolean, note?: string) {
-  const existing = store.documentVerifications.find((v) => v.documentId === documentId && v.jurorId === jurorId);
-  if (existing) {
-    existing.credible = credible;
-    existing.note = note;
-    existing.reviewedAt = new Date().toISOString();
-  } else {
-    store.documentVerifications.push({
-      id: generateId("docverify"),
-      documentId,
-      jurorId,
-      credible,
-      note,
-      reviewedAt: new Date().toISOString(),
-    });
-  }
+/**
+ * documentId here is document_evidence.id (what lib/data/checklist.ts's
+ * RequiredDocument.id resolves to for uploaded items) — looked up
+ * directly to get its application_id/item_id rather than re-deriving
+ * from the full checklist.
+ */
+async function resolveDocument(supabase: Awaited<ReturnType<typeof createClient>>, documentId: string) {
+  const { data } = await supabase.from("document_evidence").select("application_id, item_id, file_name").eq("id", documentId).maybeSingle();
+  return data;
 }
 
 export async function verifyDocumentCredible(documentId: string, jurorId: string) {
-  const doc = store.documents.find((d) => d.id === documentId);
+  const supabase = await createClient();
+  const doc = await resolveDocument(supabase, documentId);
   if (!doc) return { success: false, error: "Document not found." };
 
-  upsertVerification(documentId, jurorId, true);
-  store.redFlags = store.redFlags.filter((f) => !(f.documentId === documentId && f.jurorId === jurorId));
+  const { error } = await supabase
+    .from("stage2_document_reviews")
+    .upsert(
+      { application_id: doc.application_id, item_id: doc.item_id, juror_id: jurorId, credible: true, reviewed_at: new Date().toISOString() },
+      { onConflict: "application_id,item_id,juror_id" }
+    );
+  if (error) return { success: false, error: "Could not save review." };
 
-  logAction("Jury", "Verified document as credible:", doc.name);
-  revalidatePath(`/jury/documents/${doc.applicationId}`);
+  // Note: red_flags has no UPDATE/DELETE policy for anyone (append-only,
+  // permanent record by design) — marking credible now doesn't retract an
+  // earlier flag this juror may have raised on this document.
+  logAction("Jury", "Verified document as credible:", doc.file_name);
+  revalidatePath(`/jury/documents/${doc.application_id}`);
   return { success: true };
 }
 
+/**
+ * red_flags is INSERT + SELECT only — no way to edit or withdraw a flag
+ * once raised, by design (a permanent record, not a mutable status). If
+ * this juror already flagged this document, this is a no-op on the flag
+ * itself (the underlying review verdict below still upserts normally) —
+ * there's no schema-backed way to change the reason after the fact.
+ */
 export async function flagDocument(documentId: string, jurorId: string, reason: RedFlagReason, note?: string) {
-  const doc = store.documents.find((d) => d.id === documentId);
+  const supabase = await createClient();
+  const doc = await resolveDocument(supabase, documentId);
   if (!doc) return { success: false, error: "Document not found." };
 
-  upsertVerification(documentId, jurorId, false, note);
-  const existingFlag = store.redFlags.find((f) => f.documentId === documentId && f.jurorId === jurorId);
-  if (existingFlag) {
-    existingFlag.reason = reason;
-    existingFlag.note = note;
-  } else {
-    store.redFlags.push({ id: generateId("redflag"), documentId, jurorId, reason, note, createdAt: new Date().toISOString() });
+  const { error: reviewError } = await supabase
+    .from("stage2_document_reviews")
+    .upsert(
+      { application_id: doc.application_id, item_id: doc.item_id, juror_id: jurorId, credible: false, notes: note, reviewed_at: new Date().toISOString() },
+      { onConflict: "application_id,item_id,juror_id" }
+    );
+  if (reviewError) return { success: false, error: "Could not save review." };
+
+  const { data: existingFlag } = await supabase
+    .from("red_flags")
+    .select("id")
+    .eq("document_evidence_id", documentId)
+    .eq("flagged_by", jurorId)
+    .maybeSingle();
+  if (!existingFlag) {
+    await supabase.from("red_flags").insert({
+      application_id: doc.application_id,
+      document_evidence_id: documentId,
+      flagged_by: jurorId,
+      reason,
+      notes: note,
+    });
   }
 
-  logAction("Jury", `Red-flagged document (${reason}):`, doc.name);
+  logAction("Jury", `Red-flagged document (${reason}):`, doc.file_name);
 
-  const redFlagCount = await getRedFlagCount(doc.applicationId);
+  const { data: app } = await supabase.from("applications").select("red_flag_count").eq("id", doc.application_id).maybeSingle();
+  const redFlagCount = app?.red_flag_count ?? 0;
   if (redFlagCount === 3) {
-    const app = store.applications.find((a) => a.id === doc.applicationId);
-    const org = app ? store.organizations.find((o) => o.id === app.organizationId) : undefined;
-    logAction("System", "3+ red flags — mandatory Secretariat review triggered for", org?.name ?? doc.applicationId);
+    logAction("System", "3+ red flags — mandatory Secretariat review triggered for", doc.application_id);
   }
 
-  revalidatePath(`/jury/documents/${doc.applicationId}`);
+  revalidatePath(`/jury/documents/${doc.application_id}`);
   return { success: true, redFlagCount };
 }

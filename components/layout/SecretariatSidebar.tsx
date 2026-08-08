@@ -11,6 +11,7 @@ import { signOut } from "@/lib/auth/actions";
 const NAV_ITEMS = [
   { href: "/secretariat", label: "Dashboard" },
   { href: "/secretariat/live-scoring", label: "Live Scoring" },
+  { href: "/secretariat/shortlisting", label: "Shortlisting" },
   { href: "/secretariat/users", label: "Users & Roles" },
   { href: "/secretariat/criteria", label: "Sectors & Framework" },
   { href: "/secretariat/panels", label: "Jury Panels" },

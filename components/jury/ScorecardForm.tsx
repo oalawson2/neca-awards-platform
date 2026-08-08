@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { saveScorecardDimension, saveInterviewFinding, submitScorecard } from "@/lib/actions/scorecards";
-import { blendedPillarScore } from "@/lib/data/scorecards";
+import { blendedPillarScore } from "@/lib/scoring/stage2";
 import { PILLARS } from "@/lib/mock/framework";
 import { PILLAR_SCORE_WEIGHTS } from "@/types/domain";
 import type { PillarCode, PillarScorecard, ScorecardRound } from "@/types/domain";

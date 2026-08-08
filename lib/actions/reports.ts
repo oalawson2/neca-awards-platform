@@ -73,7 +73,11 @@ export async function approveAndReleaseReport(applicationId: string, approverNam
     report.status = "approved";
     report.releasedAt = now;
   }
-  app.status = "released";
+  // No application.status change here — "released" isn't a real status
+  // value (see NECA_Supabase_Schema_Reference.md's application_status
+  // enum). Release is entirely the report row's own state
+  // (status='approved' + releasedAt), which is what gates applicant
+  // visibility — see app/(portals)/applicant/report/page.tsx.
 
   logAction(approverName, "Approved and released report for", org.name);
   revalidatePath("/secretariat/ai-reports");

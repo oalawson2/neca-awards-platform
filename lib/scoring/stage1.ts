@@ -90,7 +90,7 @@ export function itemScorePercent(
   const value = answer.value;
 
   switch (item.responseType) {
-    case "yn":
+    case "yn_na":
       if (typeof value !== "boolean") return null;
       // "Yes" earns provisional marks on Policy Exists (25%) + Implementation (30%) only — 55% of item weight.
       return value ? 55 : 0;
@@ -204,7 +204,7 @@ export function evidenceTriggerFired(item: AssessmentItem, answer: AssessmentAns
   if (!item.evidenceName || !answer || answer.isNA) return false;
   const value = answer.value;
   switch (item.responseType) {
-    case "yn":
+    case "yn_na":
       return value === true;
     case "maturity":
       return typeof value === "number" && value >= 3;

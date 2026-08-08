@@ -191,7 +191,7 @@ function generateAnswerValue(item: (typeof ASSESSMENT_ITEMS)[number], orgId: str
   const r = seededRatio(`${orgId}:${item.id}`);
   const effectiveR = Math.min(0.98, r * (1 - bias) + bias * 0.9);
   switch (item.responseType) {
-    case "yn":
+    case "yn_na":
       return effectiveR > 0.25;
     case "maturity":
       return Math.max(1, Math.min(5, Math.round(1 + effectiveR * 4)));
@@ -357,7 +357,7 @@ function seed(): Store {
       id: "app-alpha",
       referenceNo: "EEA-2026-000101",
       organizationId: "org-alpha",
-      status: "scored",
+      status: "stage2_scored",
       eligibilityDeclarations: { legallyRegistered: true, taxCompliant: true, notUnderSanction: true, infoAccurate: true },
       eligibilityFlagged: false,
       submittedAt: nowIso(-20),
@@ -370,7 +370,7 @@ function seed(): Store {
       id: "app-beta",
       referenceNo: "EEA-2026-000102",
       organizationId: "org-beta",
-      status: "stage2_interview",
+      status: "in_stage2",
       eligibilityDeclarations: { legallyRegistered: true, taxCompliant: true, notUnderSanction: true, infoAccurate: true },
       eligibilityFlagged: false,
       submittedAt: nowIso(-15),

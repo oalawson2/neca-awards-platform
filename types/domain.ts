@@ -45,7 +45,7 @@ export interface Pillar {
 // ===========================================================================
 
 export type ResponseType =
-  | "yn" // Yes / No / (optionally) Not Applicable
+  | "yn_na" // Yes / No / (optionally) Not Applicable — matches the real response_type enum's "yn_na" value exactly
   | "maturity" // 5-point maturity scale, item-specific stage labels
   | "frequency" // Never / Rarely / Sometimes / Often-Usually / Always
   | "numeric"
@@ -67,7 +67,10 @@ export const FREQUENCY_LEVEL_PERCENTS = [0, 25, 50, 75, 100] as const;
  * the "-alt" suffix for Section D's non-unionised branch).
  */
 export interface AssessmentItem {
+  /** Item code (B1, D3-alt, ...) — the natural key used everywhere in this codebase (URLs, branching, scoring). */
   id: string;
+  /** Real `items.id` UUID — what application_responses.item_id and friends actually FK to. See lib/mock/framework.ts's header. */
+  dbId: string;
   pillarCode: PillarCode;
   order: number;
   prompt: string;
@@ -85,12 +88,17 @@ export interface AssessmentItem {
    * Links branch-equivalent items across Section D's unionised vs
    * non-unionised paths (e.g. "D3" and "D3-alt" share branchGroup "D3") so
    * scoring/weight logic can treat them as the same "slot" — doc's
-   * "equivalently weighted" branch table (section 9.2/D2).
+   * "equivalently weighted" branch table (section 9.2/D2). Not stored in
+   * the real schema (which only records branch_scope per item, not the
+   * grouping) — derived/hand-set in lib/mock/framework.ts.
    */
   branchGroup?: string;
-  branchValue?: "unionised" | "non-unionised";
-  /** Whether N/A is offered on this item (doc section 2.1 rule 7 / 4.2). */
+  /** Matches the real `branch_scope` enum's non-"all" values exactly. */
+  branchValue?: "unionised" | "non_unionised";
+  /** Whether N/A is offered on this item (doc section 2.1 rule 7 / 4.2) — matches real `items.na_allowed`. */
   allowNA?: boolean;
+  /** True only for G2 — matches real `items.triggers_eligibility_review_on_no`. A "No" answer flags the application for Secretariat review. */
+  triggersEligibilityReviewOnNo?: boolean;
 }
 
 // ===========================================================================
@@ -216,15 +224,32 @@ export interface EligibilityReview {
 // Application
 // ===========================================================================
 
+/**
+ * Matches the real `application_status` enum exactly (see
+ * NECA_Supabase_Schema_Reference.md) — RLS depends on these literal values
+ * (e.g. the Employer of the Year cross-panel visibility exception checks
+ * status IN ('sector_winner','eoy_finalist','eoy_winner') directly), so
+ * this can't drift from the enum the way the old mock-only union did.
+ *
+ * Note there's only one in-progress Stage 2 status (`in_stage2`) covering
+ * both the 2a document-verification and 2b interview sub-phases — the
+ * schema doesn't store which sub-phase an application is in as a status;
+ * lib/data/applications.ts derives that from stage2_document_reviews /
+ * interviews completeness instead (see getStage2Phase()).
+ */
 export type ApplicationStatus =
-  | "draft" // Section A + questionnaire in progress
-  | "submitted" // Stage 1 complete (all Mandatory docs uploaded), awaiting shortlist decision
+  | "draft"
+  | "submitted"
+  | "eligibility_flagged"
+  | "ranked"
+  | "shortlisted"
   | "not_shortlisted"
-  | "shortlisted" // proceeding to Stage 2
-  | "stage2_verification" // 2a document review in progress
-  | "stage2_interview" // 2b interview stage
-  | "scored" // Verified Score computed, panel's work on this applicant done
-  | "released"; // report released to applicant
+  | "in_stage2"
+  | "stage2_scored"
+  | "sector_finalist"
+  | "sector_winner"
+  | "eoy_finalist"
+  | "eoy_winner";
 
 export interface Application {
   id: string;
@@ -232,7 +257,14 @@ export interface Application {
   organizationId: string;
   status: ApplicationStatus;
   eligibilityDeclarations: EligibilityDeclarations;
-  /** True whenever an open EligibilityReview exists for this application. */
+  /**
+   * True whenever `applications.eligibility_review_needed` is set (auto
+   * per doc: failed declaration or G2=No) — this does NOT block
+   * submission, it's purely an Secretariat review flag. Separate from (and
+   * a looser signal than) the 'eligibility_flagged' status value, which
+   * the schema also defines but which this app doesn't drive the normal
+   * submit flow into — see lib/data/applications.ts's docstring.
+   */
   eligibilityFlagged: boolean;
   submittedAt: string | null;
   /**
@@ -242,9 +274,13 @@ export interface Application {
    * score."
    */
   stage1Score: number | null;
+  /** Computed from status, not a stored column — null until a shortlist decision (ranked or later) exists. */
   isShortlisted: boolean | null;
+  /** Computed from status: true for sector_winner, eoy_finalist, eoy_winner (winning EOY implies having won your sector first). */
   isSectorWinner?: boolean;
+  /** Computed from status: true for eoy_finalist, eoy_winner. */
   isEmployerOfYearFinalist?: boolean;
+  /** Computed from status: true only for eoy_winner. */
   isEmployerOfYear?: boolean;
 }
 

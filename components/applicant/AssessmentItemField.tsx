@@ -76,7 +76,7 @@ function ResponseControl({
   onChange: (value: AnswerValue) => void;
 }) {
   switch (item.responseType) {
-    case "yn":
+    case "yn_na":
       return (
         <div className="flex gap-2">
           <ChoiceButton active={value === true} onClick={() => onChange(true)}>

@@ -12,22 +12,26 @@ export default async function ApplicantReportPage() {
   const application = await getApplicationForApplicantUser(user.id);
   if (!application) redirect("/login");
 
-  if (application.status !== "released") {
-    return (
-      <div className="max-w-lg mx-auto px-6 py-16 text-center">
-        <h1 className="font-heading font-extrabold text-xl text-navy">Report not yet available</h1>
-        <p className="text-sm text-text-muted mt-2">
-          Your report will appear here — and we&rsquo;ll email you — once the Secretariat releases it.
-        </p>
-      </div>
-    );
-  }
+  /**
+   * Gated on the report row's own release state, not application.status —
+   * matches the real schema exactly (task #54): applicants have no RLS
+   * read access to juror_scores at all, so the only thing that can ever
+   * make a report visible to them is application_reports.released_at
+   * being set. There's no separate "released" application status.
+   */
+  const notReleased = (
+    <div className="max-w-lg mx-auto px-6 py-16 text-center">
+      <h1 className="font-heading font-extrabold text-xl text-navy">Report not yet available</h1>
+      <p className="text-sm text-text-muted mt-2">
+        Your report will appear here — and we&rsquo;ll email you — once the Secretariat releases it.
+      </p>
+    </div>
+  );
 
   if (application.isShortlisted) {
     const report = await getShortlistedReport(application.id);
-    if (!report) {
-      return <div className="max-w-lg mx-auto px-6 py-16 text-center text-sm text-text-muted">Report not yet available.</div>;
-    }
+    if (!report) return notReleased;
+    if (report.status !== "approved") return notReleased;
     return (
       <div>
         <div className="h-17 border-b border-border flex items-center justify-between px-6 sm:px-8">
@@ -82,9 +86,8 @@ export default async function ApplicantReportPage() {
   }
 
   const report = await getNonShortlistedReport(application.id);
-  if (!report) {
-    return <div className="max-w-lg mx-auto px-6 py-16 text-center text-sm text-text-muted">Report not yet available.</div>;
-  }
+  if (!report) return notReleased;
+  if (report.status !== "approved") return notReleased;
   return (
     <div className="max-w-3xl mx-auto px-6 sm:px-8 py-8 sm:py-10">
       <h1 className="font-heading font-extrabold text-xl sm:text-2xl text-navy mb-1.5">Your feedback summary</h1>

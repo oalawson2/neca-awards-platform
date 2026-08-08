@@ -65,19 +65,21 @@ export default async function ApplicantDashboardPage() {
           </p>
         )}
 
-        {(application.status === "shortlisted" ||
-          application.status === "stage2_verification" ||
-          application.status === "stage2_interview") && (
+        {(application.status === "shortlisted" || application.status === "in_stage2") && (
           <p className="text-sm text-text-muted mt-4 leading-relaxed">
             Your application has been shortlisted and is with the sector jury panel for document verification and
             interview. Scores stay confidential until this stage concludes.
           </p>
         )}
 
-        {(application.status === "scored" || application.status === "released") && (
+        {(application.status === "stage2_scored" ||
+          application.status === "sector_finalist" ||
+          application.status === "sector_winner" ||
+          application.status === "eoy_finalist" ||
+          application.status === "eoy_winner") && (
           <p className="text-sm text-text-muted mt-4 leading-relaxed">
-            Jury review is complete for your application.
-            {application.status === "released" && " Your report is ready — see the Report tab."}
+            Jury review is complete for your application. Check the Report tab — it becomes available once the
+            Secretariat releases it.
           </p>
         )}
       </Card>

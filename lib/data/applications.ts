@@ -72,8 +72,10 @@ export async function getDashboardStats() {
     total: all.length,
     submitted: all.filter((a) => a.status === "submitted").length,
     shortlisted: all.filter((a) => a.isShortlisted === true).length,
-    inStage2: all.filter((a) => a.status === "stage2_verification" || a.status === "stage2_interview").length,
-    scored: all.filter((a) => a.status === "scored" || a.status === "released").length,
+    inStage2: all.filter((a) => a.status === "in_stage2").length,
+    scored: all.filter((a) =>
+      ["stage2_scored", "sector_finalist", "sector_winner", "eoy_finalist", "eoy_winner"].includes(a.status)
+    ).length,
     eligibilityFlagged: all.filter((a) => a.eligibilityFlagged).length,
   };
 }

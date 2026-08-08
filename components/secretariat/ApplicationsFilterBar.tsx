@@ -9,12 +9,16 @@ const STATUS_OPTIONS = [
   { value: "", label: "All statuses" },
   { value: "draft", label: "Draft" },
   { value: "submitted", label: "Submitted" },
+  { value: "eligibility_flagged", label: "Eligibility flagged" },
+  { value: "ranked", label: "Ranked" },
   { value: "not_shortlisted", label: "Not shortlisted" },
   { value: "shortlisted", label: "Shortlisted" },
-  { value: "stage2_verification", label: "Document verification" },
-  { value: "stage2_interview", label: "Sector interview" },
-  { value: "scored", label: "Scored" },
-  { value: "released", label: "Released" },
+  { value: "in_stage2", label: "Stage 2 (verification / interview)" },
+  { value: "stage2_scored", label: "Scored" },
+  { value: "sector_finalist", label: "Sector finalist" },
+  { value: "sector_winner", label: "Sector winner" },
+  { value: "eoy_finalist", label: "EOY finalist" },
+  { value: "eoy_winner", label: "EOY winner" },
 ];
 
 export function ApplicationsFilterBar({ sectors }: { sectors: Sector[] }) {

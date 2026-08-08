@@ -101,7 +101,7 @@ export async function submitScorecard(applicationId: string, jurorId: string, ju
   if (round === "sector" && app) {
     const { submitted, total } = await getPanelSubmissionCount(applicationId, round);
     if (total > 0 && submitted >= total) {
-      app.status = "scored";
+      app.status = "stage2_scored";
       logAction("System", "All panel jurors scored", org?.name ?? applicationId);
     }
   }

@@ -18,7 +18,7 @@ export interface SectorWinnerGroup {
 
 /** Every "scored" application, ranked by panel-averaged Verified Score within its sector — the panel's own candidates for that sector's winner (doc section 11.5: "one sectoral winner per assigned sector"). */
 export async function getSectorWinnerGroups(): Promise<SectorWinnerGroup[]> {
-  const scoredApps = store.applications.filter((a) => a.status === "scored" || a.isSectorWinner);
+  const scoredApps = store.applications.filter((a) => a.status === "stage2_scored" || a.isSectorWinner);
   const groups: SectorWinnerGroup[] = [];
 
   for (const sector of store.sectors) {

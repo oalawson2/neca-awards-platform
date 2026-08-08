@@ -1,41 +1,91 @@
 "use server";
 
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { store, applicantOrgLink, generateId } from "@/lib/mock/store";
-import { SESSION_COOKIE_NAME } from "@/lib/auth/session";
+import { createClient } from "@/lib/supabase/server";
 import type { UserRole } from "@/types/auth";
 
 export interface AuthResult {
   success: boolean;
   error?: string;
   role?: UserRole;
+  /**
+   * True when the account was created but Supabase Auth's own signup
+   * confirmation email (built into Supabase, separate from — and
+   * unaffected by — this app's not-yet-wired transactional email system)
+   * hasn't been confirmed yet. No profile row exists yet in this case; see
+   * ensureProfile()'s docstring for why that's deferred to first sign-in.
+   */
+  needsEmailConfirmation?: boolean;
 }
 
 /**
- * Mock-phase sign-in: any non-empty password is accepted for a known
- * email. Once Supabase Auth is connected, this becomes a real
- * supabase.auth.signInWithPassword call — callers (the login form) don't
- * need to change.
+ * Creates the caller's own `profiles` row if one doesn't already exist,
+ * always with role='applicant' — the only role the `profiles_insert_own_applicant`
+ * RLS policy permits a user to self-insert (secretariat/jury are promoted
+ * later by an existing secretariat user, never self-assigned; see
+ * lib/actions/users.ts).
+ *
+ * In practice a DB trigger (`on_auth_user_created` -> `handle_new_auth_user()`)
+ * already creates this row synchronously as part of the auth.users insert,
+ * so the select below normally finds it immediately and the insert path
+ * never runs. It's kept as a defensive fallback (and hardened against the
+ * trigger having won a race — PostgREST surfaces that as a 23505 unique
+ * violation, which is treated as success, not an error) rather than removed,
+ * since nothing here depends on the trigger continuing to exist.
+ *
+ * Called from both signUpApplicant and signIn because whether signUp()
+ * itself yields an authenticated session depends on whether this Supabase
+ * project has email confirmation enabled — that's project-level config
+ * this codebase can't see or control, so instead of guessing, the account
+ * is finished setting up the first time we genuinely have an authenticated
+ * session for it, whichever call that turns out to be.
  */
+async function ensureProfile(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  user: { id: string; email: string }
+): Promise<{ role: UserRole } | { error: string }> {
+  const { data: existing } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (existing) return { role: existing.role };
+
+  const { data: created, error } = await supabase
+    .from("profiles")
+    .insert({ id: user.id, email: user.email, full_name: user.email.split("@")[0], role: "applicant" })
+    .select("role")
+    .single();
+  if (created) return { role: created.role };
+
+  if (error?.code === "23505") {
+    // Lost a race with the trigger between our select and insert — the row
+    // exists now, so re-read it instead of treating this as a failure.
+    const { data: refetched } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+    if (refetched) return { role: refetched.role };
+  }
+
+  return { error: "Your account was created but we couldn't finish setting it up. Contact the Secretariat." };
+}
+
+/** Real Supabase Auth sign-in. Self-heals a missing profile row (see ensureProfile). */
 export async function signIn(email: string, password: string): Promise<AuthResult> {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail || !password) {
     return { success: false, error: "Enter your email and password." };
   }
 
-  const credential = store.credentials.find((c) => c.email.toLowerCase() === normalizedEmail);
-  const user = credential ? store.users.find((u) => u.id === credential.userId) : undefined;
-  if (!credential || !user) {
-    return { success: false, error: "No account found with that email." };
-  }
-  if (user.status === "invited") {
-    return { success: false, error: "This account hasn't accepted its invite yet." };
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
+  if (error || !data.user) {
+    return { success: false, error: "Incorrect email or password." };
   }
 
-  const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE_NAME, user.id, { httpOnly: true, sameSite: "lax", path: "/" });
-  return { success: true, role: user.role };
+  const profileResult = await ensureProfile(supabase, { id: data.user.id, email: data.user.email ?? normalizedEmail });
+  if ("error" in profileResult) {
+    return { success: false, error: profileResult.error };
+  }
+  return { success: true, role: profileResult.role };
 }
 
 export interface SignUpInput {
@@ -45,7 +95,18 @@ export interface SignUpInput {
   agreeToTerms: boolean;
 }
 
-/** Applicant self-registration. Secretariat and Jury are invite-only and never go through this. */
+/**
+ * Applicant self-registration only — secretariat/jury accounts are never
+ * created here (see lib/actions/users.ts for how those are provisioned).
+ *
+ * Deliberately does NOT create an organizations/applications row (unlike
+ * the mock-phase version this replaces): organizations has several NOT
+ * NULL columns (sector_id, org_size_tier, contact_name, etc.) with no
+ * sensible blank default, and rc_number/contact_email are both unique, so
+ * a placeholder row would either violate constraints or collide across
+ * applicants. Section A (Eligibility & Registration) creates the real
+ * organization + draft application on first save instead.
+ */
 export async function signUpApplicant(input: SignUpInput): Promise<AuthResult> {
   const email = input.email.trim().toLowerCase();
   if (!email || !input.password) {
@@ -57,53 +118,34 @@ export async function signUpApplicant(input: SignUpInput): Promise<AuthResult> {
   if (!input.agreeToTerms) {
     return { success: false, error: "You must agree to the Data Privacy Statement and Terms of Participation." };
   }
-  if (store.credentials.some((c) => c.email.toLowerCase() === email)) {
-    return { success: false, error: "An account with this email already exists." };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.signUp({ email, password: input.password });
+  if (error) {
+    return { success: false, error: error.message };
+  }
+  if (!data.user) {
+    return { success: false, error: "Could not create your account. Try again." };
   }
 
-  const userId = generateId("app-user");
-  const orgId = generateId("org");
-  const appId = generateId("app");
-  const defaultSectorId = store.sectors[0]?.id ?? "";
+  if (!data.session) {
+    // Email confirmation is required before this session is usable — no
+    // profiles row can be inserted yet (RLS's WITH CHECK needs auth.uid()
+    // to resolve, which requires an authenticated session, not just a
+    // created auth.users row). ensureProfile() runs on their first
+    // sign-in instead, once they've confirmed and actually have one.
+    return { success: true, needsEmailConfirmation: true };
+  }
 
-  store.users.push({ id: userId, name: email.split("@")[0], email, role: "applicant", status: "active" });
-  store.credentials.push({ userId, email, password: input.password });
-  store.organizations.push({
-    id: orgId,
-    name: "",
-    rcNumber: "",
-    yearEstablishedBand: "lt5",
-    sectorId: defaultSectorId,
-    sizeTier: "micro",
-    geographicalCoverage: "single_state",
-    ownershipStructure: "private",
-    localOrMultinational: "local",
-    isUnionised: false,
-    primaryContactName: "",
-    primaryContactEmail: email,
-    primaryContactPhone: "",
-    previousParticipation: { participated: false, years: [] },
-  });
-  applicantOrgLink[userId] = orgId;
-  store.applications.push({
-    id: appId,
-    referenceNo: `EEA-2026-${String(Math.floor(Math.random() * 9000) + 1000)}`,
-    organizationId: orgId,
-    status: "draft",
-    eligibilityDeclarations: { legallyRegistered: false, taxCompliant: false, notUnderSanction: false, infoAccurate: false },
-    eligibilityFlagged: false,
-    submittedAt: null,
-    stage1Score: null,
-    isShortlisted: null,
-  });
-
-  const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE_NAME, userId, { httpOnly: true, sameSite: "lax", path: "/" });
-  return { success: true, role: "applicant" };
+  const profileResult = await ensureProfile(supabase, { id: data.user.id, email: data.user.email ?? email });
+  if ("error" in profileResult) {
+    return { success: false, error: profileResult.error };
+  }
+  return { success: true, role: profileResult.role };
 }
 
 export async function signOut(): Promise<void> {
-  const cookieStore = await cookies();
-  cookieStore.delete(SESSION_COOKIE_NAME);
+  const supabase = await createClient();
+  await supabase.auth.signOut();
   redirect("/login");
 }

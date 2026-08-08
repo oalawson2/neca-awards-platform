@@ -3,7 +3,6 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { getApplication } from "@/lib/data/applications";
 import { getDocumentsForVerification, getRedFlagCount } from "@/lib/data/stage2a";
 import { getInterviewSession } from "@/lib/data/interviews";
-import { store } from "@/lib/mock/store";
 import { DocumentVerificationPanel } from "@/components/jury/DocumentVerificationPanel";
 
 export default async function JuryDocumentReviewPage({ params }: { params: Promise<{ applicationId: string }> }) {
@@ -19,7 +18,7 @@ export default async function JuryDocumentReviewPage({ params }: { params: Promi
     getRedFlagCount(applicationId),
     getInterviewSession(applicationId),
   ]);
-  const jurorName = store.users.find((u) => u.id === user.id)?.name ?? user.email;
+  const jurorName = user.fullName || user.email;
 
   return (
     <DocumentVerificationPanel

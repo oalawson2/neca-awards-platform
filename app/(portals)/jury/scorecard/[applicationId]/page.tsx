@@ -2,7 +2,6 @@ import { redirect, notFound } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getApplication } from "@/lib/data/applications";
 import { getJurorScorecards, getScorecardProgress } from "@/lib/data/scorecards";
-import { store } from "@/lib/mock/store";
 import { ScorecardForm } from "@/components/jury/ScorecardForm";
 import type { ScorecardRound } from "@/types/domain";
 
@@ -28,7 +27,7 @@ export default async function JuryScorecardPage({
     getJurorScorecards(applicationId, user.id, round),
     getScorecardProgress(applicationId, user.id, round),
   ]);
-  const jurorName = store.users.find((u) => u.id === user.id)?.name ?? user.email;
+  const jurorName = user.fullName || user.email;
 
   if (progress.isComplete) {
     return (

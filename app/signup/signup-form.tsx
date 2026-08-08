@@ -14,6 +14,7 @@ export function SignupForm() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsEmailConfirmation, setNeedsEmailConfirmation] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   function handleSubmit(event: React.FormEvent) {
@@ -25,9 +26,25 @@ export function SignupForm() {
         setError(result.error ?? "Sign up failed.");
         return;
       }
+      if (result.needsEmailConfirmation) {
+        setNeedsEmailConfirmation(true);
+        return;
+      }
       router.push("/applicant/profile");
       router.refresh();
     });
+  }
+
+  if (needsEmailConfirmation) {
+    return (
+      <div className="w-full max-w-[360px]">
+        <div className="font-heading font-extrabold text-[22px] text-navy mb-3">Check your email</div>
+        <p className="text-sm text-text-muted">
+          We&apos;ve sent a confirmation link to <strong>{email}</strong>. Click it to activate your account, then{" "}
+          <Link href="/login">sign in</Link>.
+        </p>
+      </div>
+    );
   }
 
   return (

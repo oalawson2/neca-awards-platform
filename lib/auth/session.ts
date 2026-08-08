@@ -1,27 +1,44 @@
-import { cookies } from "next/headers";
 import type { SessionUser } from "@/types/auth";
-import { store } from "@/lib/mock/store";
-import { SESSION_COOKIE_NAME } from "@/lib/auth/portal-path";
+import { createClient } from "@/lib/supabase/server";
 
-export { SESSION_COOKIE_NAME, portalPathForRole } from "@/lib/auth/portal-path";
+export { portalPathForRole } from "@/lib/auth/portal-path";
 
 /**
- * Mock-phase session lookup, reading a plain cookie set by the mock sign-in
- * Server Action (lib/auth/actions.ts). Once Supabase Auth is connected,
- * only the internals here change — read the Supabase session instead of
- * this cookie — the SessionUser shape and every caller stay the same.
+ * Server Components / Route Handlers / Server Actions only — this file
+ * imports lib/supabase/server.ts, which uses next/headers, so it can't be
+ * imported from Client Components or proxy.ts. Those should import
+ * lib/auth/portal-path.ts instead (see its docstring).
  *
- * Server Components / Route Handlers only — this file imports next/headers,
- * so it can't be imported from Client Components or proxy.ts. Those should
- * import lib/auth/portal-path.ts instead (see its docstring).
+ * Uses supabase.auth.getUser() rather than getSession() — getUser()
+ * revalidates the token against the Supabase Auth server on every call,
+ * where getSession() just trusts whatever's in the cookie. That round trip
+ * is the point: it's what makes this safe to use for access decisions.
+ *
+ * A signed-in auth.users row with no matching profiles row (e.g. the
+ * profiles insert failed mid-signup) is treated as signed-out rather than
+ * crashing — there's no role to route on, so there's nothing this function
+ * can meaningfully return.
  */
 export async function getCurrentUser(): Promise<SessionUser | null> {
-  const cookieStore = await cookies();
-  const userId = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-  if (!userId) return null;
+  const supabase = await createClient();
 
-  const user = store.users.find((u) => u.id === userId);
-  if (!user) return null;
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) return null;
 
-  return { id: user.id, email: user.email, role: user.role };
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, full_name, email, role")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (!profile) return null;
+
+  return {
+    id: profile.id,
+    email: profile.email,
+    fullName: profile.full_name,
+    role: profile.role,
+  };
 }

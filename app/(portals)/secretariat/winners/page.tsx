@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
-import { store } from "@/lib/mock/store";
 import {
   getSectorWinnerGroups,
   getEmployerOfYearFinalists,
@@ -13,7 +12,6 @@ import { EmployerOfYearPanel } from "@/components/secretariat/EmployerOfYearPane
 export default async function WinnersPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  const platformUser = store.users.find((u) => u.id === user.id);
 
   const [groups, finalists, results, validation] = await Promise.all([
     getSectorWinnerGroups(),
@@ -49,7 +47,7 @@ export default async function WinnersPage() {
           finalistNames={finalistNames}
           validation={validation}
           currentUserId={user.id}
-          currentUserName={platformUser?.name ?? user.email}
+          currentUserName={user.fullName || user.email}
         />
       </div>
     </div>

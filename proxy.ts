@@ -1,44 +1,85 @@
+import { createServerClient } from "@supabase/ssr";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { SESSION_COOKIE_NAME, portalPathForRole } from "./lib/auth/portal-path";
-import { store } from "./lib/mock/store";
+import { portalPathForRole } from "./lib/auth/portal-path";
+import type { UserRole } from "./types/auth";
 
 /**
- * Role-based routing shell for the three portals.
+ * Role-based routing shell for the three portals, now backed by real
+ * Supabase Auth.
  *
- * Reads the session cookie directly via `request.cookies` rather than
- * lib/auth/session.ts's getCurrentUser() — that function uses
- * `next/headers`'s cookies(), which only works in Server Components/Route
- * Handlers, not in Proxy/Middleware (and importing that file at all pulls
- * next/headers into a bundle that can't have it). Once Supabase Auth is
- * connected, this will read the Supabase session cookie the same way.
+ * Follows Supabase's documented SSR proxy/middleware pattern: build the
+ * response via NextResponse.next({ request }) *before* calling
+ * supabase.auth.getUser(), and have the cookie adapter's setAll rebuild
+ * that response each time a cookie needs refreshing. This is what lets an
+ * expiring session get silently refreshed on a normal page request —
+ * skipping it (e.g. reading the request cookie directly instead) causes
+ * random sign-outs once the access token expires. Every return path below
+ * must carry the cookies from the latest `response`, including redirects,
+ * or the refreshed session gets dropped exactly when it was refreshed.
  */
 export async function proxy(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  let response = NextResponse.next({ request });
 
-  const userId = request.cookies.get(SESSION_COOKIE_NAME)?.value;
-  const user = userId ? store.users.find((u) => u.id === userId) : undefined;
-
-  const protectedPrefixes = ["/applicant", "/secretariat", "/jury"];
-  const isProtected = protectedPrefixes.some((prefix) =>
-    pathname.startsWith(prefix)
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          response = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+        },
+      },
+    }
   );
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  let role: UserRole | null = null;
+  if (user) {
+    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+    role = profile?.role ?? null;
+  }
+
+  const { pathname } = request.nextUrl;
+  const protectedPrefixes = ["/applicant", "/secretariat", "/jury"];
+  const isProtected = protectedPrefixes.some((prefix) => pathname.startsWith(prefix));
+
+  function withRefreshedCookies(redirectResponse: NextResponse) {
+    response.cookies.getAll().forEach((cookie) => redirectResponse.cookies.set(cookie));
+    return redirectResponse;
+  }
 
   if (isProtected && !user) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("next", pathname);
-    return NextResponse.redirect(loginUrl);
+    return withRefreshedCookies(NextResponse.redirect(loginUrl));
   }
 
-  if (isProtected && user && !pathname.startsWith(portalPathForRole(user.role))) {
-    return NextResponse.redirect(new URL(portalPathForRole(user.role), request.url));
+  // Signed in via Supabase Auth but no profiles row yet (e.g. mid-signup,
+  // pending email confirmation) — nothing to route on, treat like signed out.
+  if (isProtected && user && !role) {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("next", pathname);
+    return withRefreshedCookies(NextResponse.redirect(loginUrl));
   }
 
-  if ((pathname === "/login" || pathname === "/signup") && user) {
-    return NextResponse.redirect(new URL(portalPathForRole(user.role), request.url));
+  if (isProtected && role && !pathname.startsWith(portalPathForRole(role))) {
+    return withRefreshedCookies(NextResponse.redirect(new URL(portalPathForRole(role), request.url)));
   }
 
-  return NextResponse.next();
+  if ((pathname === "/login" || pathname === "/signup") && role) {
+    return withRefreshedCookies(NextResponse.redirect(new URL(portalPathForRole(role), request.url)));
+  }
+
+  return response;
 }
 
 export const config = {

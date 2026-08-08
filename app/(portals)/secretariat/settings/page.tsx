@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
-import { store } from "@/lib/mock/store";
 
 /**
  * The old single advancement-threshold setting is gone — Section A
@@ -12,8 +11,7 @@ import { store } from "@/lib/mock/store";
  */
 export default async function SettingsPage() {
   const user = await getCurrentUser();
-  const platformUser = user ? store.users.find((u) => u.id === user.id) : undefined;
-  if (!platformUser?.isSuperAdmin) redirect("/secretariat");
+  if (user?.role !== "secretariat_super_admin") redirect("/secretariat");
 
   const links = [
     { href: "/secretariat/shortlisting", label: "Shortlisting", desc: "Per-sector shortlist count/percentage cutoffs" },

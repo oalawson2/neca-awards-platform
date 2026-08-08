@@ -3,7 +3,6 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
 import { getApplication } from "@/lib/data/applications";
 import { getShortlistedReport, getNonShortlistedReport } from "@/lib/data/reports";
-import { store } from "@/lib/mock/store";
 import { ReportReviewForm } from "@/components/secretariat/ReportReviewForm";
 
 export default async function AIReportReviewPage({ params }: { params: Promise<{ id: string }> }) {
@@ -19,7 +18,7 @@ export default async function AIReportReviewPage({ params }: { params: Promise<{
     getShortlistedReport(id),
     getNonShortlistedReport(id),
   ]);
-  const reviewerName = store.users.find((u) => u.id === user.id)?.name ?? user.email;
+  const reviewerName = user.fullName || user.email;
 
   return (
     <ReportReviewForm

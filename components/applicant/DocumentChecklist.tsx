@@ -1,28 +1,43 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { uploadDocument } from "@/lib/actions/documents";
 import type { ChecklistGroup } from "@/lib/data/checklist";
 
-export function DocumentChecklist({ groups }: { groups: ChecklistGroup[] }) {
+export function DocumentChecklist({ applicationId, groups }: { applicationId: string; groups: ChecklistGroup[] }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const allDocs = groups.flatMap((g) => g.documents);
   const mandatory = allDocs.filter((d) => d.track === "mandatory");
   const mandatoryUploaded = mandatory.filter((d) => d.status === "uploaded").length;
   const allMandatoryUploaded = mandatory.every((d) => d.status === "uploaded");
 
-  function upload(documentId: string, name: string) {
-    setUploadingId(documentId);
-    startTransition(async () => {
-      await uploadDocument(documentId, `${name}.pdf`);
-      setUploadingId(null);
-    });
+  function pickFile(documentId: string, itemId: string) {
+    setErrors((e) => ({ ...e, [documentId]: "" }));
+    const input = fileInputRefs.current[documentId];
+    if (!input) return;
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const formData = new FormData();
+      formData.set("file", file);
+      setUploadingId(documentId);
+      startTransition(async () => {
+        const result = await uploadDocument(applicationId, itemId, formData);
+        setUploadingId(null);
+        if (!result.success) setErrors((e) => ({ ...e, [documentId]: result.error ?? "Upload failed." }));
+        input.value = "";
+        router.refresh();
+      });
+    };
+    input.click();
   }
 
   return (
@@ -60,18 +75,32 @@ export function DocumentChecklist({ groups }: { groups: ChecklistGroup[] }) {
                     <div className="text-xs text-[#AEB1BC] mt-0.5">
                       Accepted: {doc.acceptedFileTypes.join(", ").toUpperCase()} · Max {doc.maxSizeMB}MB
                     </div>
+                    {doc.status === "uploaded" && doc.fileName && (
+                      <div className="text-xs text-success mt-0.5">{doc.fileName}</div>
+                    )}
+                    {errors[doc.id] && <div className="text-xs text-error mt-0.5">{errors[doc.id]}</div>}
                   </div>
                   {doc.status === "uploaded" ? (
                     <span className="text-xs font-semibold text-success flex-shrink-0">✓ Uploaded</span>
                   ) : (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={isPending && uploadingId === doc.id}
-                      onClick={() => upload(doc.id, doc.name)}
-                    >
-                      Upload
-                    </Button>
+                    <>
+                      <input
+                        ref={(el) => {
+                          fileInputRefs.current[doc.id] = el;
+                        }}
+                        type="file"
+                        accept="application/pdf,image/jpeg,image/png"
+                        className="hidden"
+                      />
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={isPending && uploadingId === doc.id}
+                        onClick={() => pickFile(doc.id, doc.itemId)}
+                      >
+                        {isPending && uploadingId === doc.id ? "Uploading…" : "Upload"}
+                      </Button>
+                    </>
                   )}
                 </div>
               ))}

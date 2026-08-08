@@ -52,7 +52,7 @@ import { FREQUENCY_LEVEL_PERCENTS, MATURITY_LEVEL_PERCENTS } from "@/types/domai
 export function effectiveItemsForOrg(isUnionised: boolean): AssessmentItem[] {
   return ASSESSMENT_ITEMS.filter((item) => {
     if (!item.branchGroup) return true;
-    return item.branchValue === (isUnionised ? "unionised" : "non-unionised");
+    return item.branchValue === (isUnionised ? "unionised" : "non_unionised");
   });
 }
 

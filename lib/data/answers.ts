@@ -1,16 +1,41 @@
-import { store } from "@/lib/mock/store";
+import { createClient } from "@/lib/supabase/server";
+import { ASSESSMENT_ITEMS } from "@/lib/mock/framework";
 import { effectiveItemsForOrg } from "@/lib/scoring/stage1";
-import type { AssessmentAnswer } from "@/types/domain";
+import type { AssessmentAnswer, AnswerValue } from "@/types/domain";
+
+const ITEM_BY_DB_ID = new Map(ASSESSMENT_ITEMS.map((i) => [i.dbId, i]));
 
 export async function getAnswers(applicationId: string): Promise<AssessmentAnswer[]> {
-  return store.answers.filter((a) => a.applicationId === applicationId);
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("application_responses")
+    .select("item_id, response_value, na_selected, na_justification")
+    .eq("application_id", applicationId);
+  if (error || !data) return [];
+
+  return data.flatMap((row): AssessmentAnswer[] => {
+    const item = ITEM_BY_DB_ID.get(row.item_id);
+    if (!item) return [];
+    return [
+      {
+        applicationId,
+        itemId: item.id,
+        value: row.response_value as AnswerValue,
+        isNA: row.na_selected,
+        naJustification: row.na_justification ?? undefined,
+      },
+    ];
+  });
 }
 
 /** All B–I items that apply to this org, resolving Section D's branch by the org's isUnionised flag. */
 export async function getEffectiveItemsForApplication(applicationId: string) {
-  const app = store.applications.find((a) => a.id === applicationId);
-  const org = app ? store.organizations.find((o) => o.id === app.organizationId) : undefined;
-  return effectiveItemsForOrg(!!org?.isUnionised);
+  const supabase = await createClient();
+  const { data: app } = await supabase.from("applications").select("organization_id").eq("id", applicationId).maybeSingle();
+  if (!app) return effectiveItemsForOrg(false);
+
+  const { data: org } = await supabase.from("organizations").select("is_unionised").eq("id", app.organization_id).maybeSingle();
+  return effectiveItemsForOrg(!!org?.is_unionised);
 }
 
 export interface QuestionnaireProgress {

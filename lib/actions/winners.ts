@@ -42,7 +42,7 @@ export async function confirmSectorWinner(applicationId: string): Promise<Winner
   if (error) return { success: false, error: "Could not confirm winner." };
 
   const user = await getCurrentUser();
-  logAction(user?.fullName ?? "Secretariat", "Confirmed sectoral winner:", org.name);
+  await logAction(user?.fullName ?? "Secretariat", "Confirmed sectoral winner:", org.name);
   revalidatePath("/secretariat/winners");
   return { success: true };
 }
@@ -67,7 +67,7 @@ export async function conveneEmployerOfYear(): Promise<WinnerActionResult & { fi
   if (error) return { success: false, error: "Could not convene the Employer of the Year round." };
 
   const user = await getCurrentUser();
-  logAction(user?.fullName ?? "Secretariat", "Convened Employer of the Year round with", `${winners.length} finalists`);
+  await logAction(user?.fullName ?? "Secretariat", "Convened Employer of the Year round with", `${winners.length} finalists`);
   revalidatePath("/secretariat/winners");
   revalidatePath("/jury");
   return { success: true, finalistCount: winners.length };
@@ -93,7 +93,7 @@ export async function validateEmployerOfYearWinner(winnerApplicationId: string, 
   const { error } = await supabase.from("applications").update({ status: "eoy_winner" }).eq("id", winnerApplicationId);
   if (error) return { success: false, error: "Could not validate the winner." };
 
-  logAction(validatedByName, "Validated Employer of the Year:", org?.name ?? winnerApplicationId);
+  await logAction(validatedByName, "Validated Employer of the Year:", org?.name ?? winnerApplicationId);
   revalidatePath("/secretariat/winners");
   return { success: true };
 }

@@ -67,7 +67,7 @@ export async function requestInterview(applicationId: string, requestingJurorId:
   }
   await supabase.from("interviews").update({ initial_email_sent_at: new Date().toISOString() }).eq("id", interview.id);
 
-  logAction(jurorName, "Requested interview for", org?.name ?? applicationId);
+  await logAction(jurorName, "Requested interview for", org?.name ?? applicationId);
   revalidatePath("/jury/documents/" + applicationId);
   revalidatePath("/jury/availability");
   revalidatePath("/applicant/interview");
@@ -134,7 +134,7 @@ export async function addLiveEvidenceRequest(applicationId: string, itemCode: st
   });
   if (error) return { success: false, error: "Could not record the request." };
 
-  logAction("Jury", "Requested additional evidence during interview:", item.evidenceName ?? item.id);
+  await logAction("Jury", "Requested additional evidence during interview:", item.evidenceName ?? item.id);
   revalidatePath(`/jury/interview/${applicationId}`);
   return { success: true };
 }
@@ -165,7 +165,7 @@ export async function sendBookingReminder(applicationId: string) {
     });
   }
   await supabase.from("interviews").update({ last_booking_reminder_at: new Date().toISOString() }).eq("id", interview.id);
-  logAction("System", "Sent interview-booking reminder email to", org?.name ?? applicationId);
+  await logAction("System", "Sent interview-booking reminder email to", org?.name ?? applicationId);
   return { success: true };
 }
 
@@ -186,6 +186,6 @@ export async function sendAttendanceReminder(applicationId: string) {
     });
   }
   await supabase.from("interviews").update({ last_attendance_reminder_at: new Date().toISOString() }).eq("id", interview.id);
-  logAction("System", "Sent interview-attendance reminder email to", org?.name ?? applicationId);
+  await logAction("System", "Sent interview-attendance reminder email to", org?.name ?? applicationId);
   return { success: true };
 }

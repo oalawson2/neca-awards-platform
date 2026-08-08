@@ -62,7 +62,7 @@ export async function uploadDocument(applicationId: string, itemCode: string, fo
     return { success: false, error: "Could not record the upload. Try again." };
   }
 
-  logAction(user.fullName || user.email, "Uploaded document for", item.evidenceName ?? item.id);
+  await logAction(user.fullName || user.email, "Uploaded document for", item.evidenceName ?? item.id);
   revalidatePath("/applicant/documents");
   revalidatePath("/applicant/review");
   return { success: true };

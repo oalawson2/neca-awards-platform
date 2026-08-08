@@ -61,7 +61,7 @@ export async function inviteUser(input: { name: string; email: string; role: "se
   }
 
   const actor = await getCurrentUser();
-  logAction(actor?.fullName ?? "Secretariat", `Invited ${input.role}`, name);
+  await logAction(actor?.fullName ?? "Secretariat", `Invited ${input.role}`, name);
   revalidatePath("/secretariat/users");
   return { success: true };
 }
@@ -78,7 +78,7 @@ export async function resendInvite(userId: string): Promise<InviteResult> {
   if (error) return { success: false, error: "Could not resend invite." };
 
   const actor = await getCurrentUser();
-  logAction(actor?.fullName ?? "Secretariat", "Resent invite to", user.user.email);
+  await logAction(actor?.fullName ?? "Secretariat", "Resent invite to", user.user.email);
   return { success: true };
 }
 

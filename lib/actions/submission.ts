@@ -75,7 +75,7 @@ export async function submitStage1Application(applicationId: string): Promise<Su
     .eq("id", applicationId);
   if (updateError) return { success: false, error: "Could not submit — try again." };
 
-  logAction(org.name, "Submitted Stage 1 application for", org.name);
+  await logAction(org.name, "Submitted Stage 1 application for", org.name);
   revalidatePath("/applicant");
   revalidatePath("/applicant/review");
   revalidatePath("/secretariat");

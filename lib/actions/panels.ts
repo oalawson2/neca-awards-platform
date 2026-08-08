@@ -37,7 +37,7 @@ export async function ensurePanelsExist(): Promise<PanelActionResult> {
   const { error } = await supabase.from("panels").insert([{ panel_number: 1 }, { panel_number: 2 }, { panel_number: 3 }]);
   if (error) return { success: false, error: "Could not create panels." };
 
-  logAction("Secretariat", "Created the 3 jury panels", "");
+  await logAction("Secretariat", "Created the 3 jury panels", "");
   revalidatePath("/secretariat/panels");
   return { success: true };
 }
@@ -53,7 +53,7 @@ export async function assignSectorToPanel(panelId: string, sectorId: string): Pr
     return { success: false, error: "Could not assign sector." };
   }
 
-  logAction("Secretariat", "Assigned sector to panel", panelId);
+  await logAction("Secretariat", "Assigned sector to panel", panelId);
   revalidatePath("/secretariat/panels");
   return { success: true };
 }
@@ -65,7 +65,7 @@ export async function unassignSectorFromPanel(panelId: string, sectorId: string)
   const supabase = await createClient();
   await supabase.from("panel_sector_clusters").delete().eq("panel_id", panelId).eq("sector_id", sectorId);
 
-  logAction("Secretariat", "Removed sector from panel", panelId);
+  await logAction("Secretariat", "Removed sector from panel", panelId);
   revalidatePath("/secretariat/panels");
   return { success: true };
 }
@@ -82,7 +82,7 @@ export async function assignJurorToPanel(panelId: string, jurorId: string): Prom
     return { success: false, error: "Could not assign juror." };
   }
 
-  logAction("Secretariat", "Assigned juror to panel", jurorId);
+  await logAction("Secretariat", "Assigned juror to panel", jurorId);
   revalidatePath("/secretariat/panels");
   revalidatePath("/secretariat/users");
   return { success: true };
@@ -95,7 +95,7 @@ export async function removeJurorFromPanel(jurorId: string): Promise<PanelAction
   const supabase = await createClient();
   await supabase.from("panel_memberships").delete().eq("juror_id", jurorId);
 
-  logAction("Secretariat", "Removed juror from panel", jurorId);
+  await logAction("Secretariat", "Removed juror from panel", jurorId);
   revalidatePath("/secretariat/panels");
   revalidatePath("/secretariat/users");
   return { success: true };
@@ -132,7 +132,7 @@ export async function recordJurorConflict(input: {
   });
   if (error) return { success: false, error: "Could not record conflict." };
 
-  logAction(user?.fullName ?? "Secretariat", "Recorded conflict of interest for", input.jurorId);
+  await logAction(user?.fullName ?? "Secretariat", "Recorded conflict of interest for", input.jurorId);
   revalidatePath("/secretariat/panels");
   return { success: true };
 }

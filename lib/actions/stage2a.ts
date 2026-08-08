@@ -32,7 +32,7 @@ export async function verifyDocumentCredible(documentId: string, jurorId: string
   // Note: red_flags has no UPDATE/DELETE policy for anyone (append-only,
   // permanent record by design) — marking credible now doesn't retract an
   // earlier flag this juror may have raised on this document.
-  logAction("Jury", "Verified document as credible:", doc.file_name);
+  await logAction("Jury", "Verified document as credible:", doc.file_name);
   revalidatePath(`/jury/documents/${doc.application_id}`);
   return { success: true };
 }
@@ -73,12 +73,12 @@ export async function flagDocument(documentId: string, jurorId: string, reason: 
     });
   }
 
-  logAction("Jury", `Red-flagged document (${reason}):`, doc.file_name);
+  await logAction("Jury", `Red-flagged document (${reason}):`, doc.file_name);
 
   const { data: app } = await supabase.from("applications").select("red_flag_count").eq("id", doc.application_id).maybeSingle();
   const redFlagCount = app?.red_flag_count ?? 0;
   if (redFlagCount === 3) {
-    logAction("System", "3+ red flags — mandatory Secretariat review triggered for", doc.application_id);
+    await logAction("System", "3+ red flags — mandatory Secretariat review triggered for", doc.application_id);
   }
 
   revalidatePath(`/jury/documents/${doc.application_id}`);

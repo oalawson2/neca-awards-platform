@@ -68,7 +68,7 @@ export async function generateReport(applicationId: string): Promise<ReportActio
   );
   if (error) return { success: false, error: "Could not generate report." };
 
-  logAction("System", "Generated report for", org?.name ?? applicationId);
+  await logAction("System", "Generated report for", org?.name ?? applicationId);
   revalidatePath("/secretariat/ai-reports");
   revalidatePath(`/secretariat/ai-reports/${applicationId}`);
   return { success: true };
@@ -93,7 +93,7 @@ export async function approveAndReleaseReport(applicationId: string, approverNam
   const { data: app } = await supabase.from("applications").select("organization_id").eq("id", applicationId).maybeSingle();
   const { data: org } = app ? await supabase.from("organizations").select("name").eq("id", app.organization_id).maybeSingle() : { data: null };
 
-  logAction(approverName, "Approved and released report for", org?.name ?? applicationId);
+  await logAction(approverName, "Approved and released report for", org?.name ?? applicationId);
   revalidatePath("/secretariat/ai-reports");
   revalidatePath("/applicant/report");
   return { success: true };
@@ -113,7 +113,7 @@ export async function sendBackReport(applicationId: string, reviewerName: string
   const { data: app } = await supabase.from("applications").select("organization_id").eq("id", applicationId).maybeSingle();
   const { data: org } = app ? await supabase.from("organizations").select("name").eq("id", app.organization_id).maybeSingle() : { data: null };
 
-  logAction(reviewerName, "Sent report back for revision:", org?.name ?? applicationId);
+  await logAction(reviewerName, "Sent report back for revision:", org?.name ?? applicationId);
   revalidatePath("/secretariat/ai-reports");
   return { success: true };
 }

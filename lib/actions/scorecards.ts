@@ -137,7 +137,7 @@ export async function submitScorecard(applicationId: string, jurorId: string, ju
   // authenticated users (service-role only) — deferred to task #55,
   // which is already reconsidering the audit-writing story end to end
   // rather than bolting on a partial version here.
-  logAction(jurorName, "Submitted pillar scorecard for", org?.name ?? applicationId);
+  await logAction(jurorName, "Submitted pillar scorecard for", org?.name ?? applicationId);
 
   revalidatePath(`/jury/scorecard/${applicationId}`);
   return { success: true };
@@ -197,7 +197,7 @@ export async function closeStage2Scoring(applicationId: string): Promise<{ succe
     .eq("id", applicationId);
   if (error) return { success: false, error: "Could not close scoring." };
 
-  logAction(user.fullName || user.email, "Closed Stage 2 scoring for", applicationId);
+  await logAction(user.fullName || user.email, "Closed Stage 2 scoring for", applicationId);
   revalidatePath("/secretariat/live-scoring");
   revalidatePath(`/secretariat/applications/${applicationId}`);
   return { success: true, verifiedScore: overall };

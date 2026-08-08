@@ -119,7 +119,7 @@ export async function saveOrganizationProfile(
       .eq("id", applicationId);
     if (!appError) await syncEligibilityReview(applicationId, failedDeclaration);
 
-    logAction(trimmedName, "Saved organisation profile for", trimmedName);
+    await logAction(trimmedName, "Saved organisation profile for", trimmedName);
     revalidatePath("/applicant/profile");
     revalidatePath("/applicant");
     return { success: true, applicationId };
@@ -154,7 +154,7 @@ export async function saveOrganizationProfile(
   }
   await syncEligibilityReview(newApp.id, failedDeclaration);
 
-  logAction(trimmedName, "Created organisation profile for", trimmedName);
+  await logAction(trimmedName, "Created organisation profile for", trimmedName);
   revalidatePath("/applicant/profile");
   revalidatePath("/applicant");
   return { success: true, applicationId: newApp.id };

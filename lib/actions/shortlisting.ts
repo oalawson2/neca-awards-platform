@@ -36,7 +36,7 @@ export async function setShortlistConfig(sectorId: string, sizeTier: OrgSizeTier
   );
   if (error) return { success: false, error: "Could not save shortlist configuration." };
 
-  logAction(user.fullName || user.email, `Set shortlist ${mode} to ${value} for`, `${sectorId} (${sizeTier})`);
+  await logAction(user.fullName || user.email, `Set shortlist ${mode} to ${value} for`, `${sectorId} (${sizeTier})`);
   revalidatePath("/secretariat/shortlisting");
   return { success: true };
 }
@@ -70,7 +70,7 @@ export async function applyShortlist(sectorId: string, sizeTier: OrgSizeTier): P
       .eq("id", ranked.id);
   }
 
-  logAction(user.fullName || user.email, `Applied shortlist (top ${category.cutoffCount}) for`, `${category.sectorName} (${sizeTier})`);
+  await logAction(user.fullName || user.email, `Applied shortlist (top ${category.cutoffCount}) for`, `${category.sectorName} (${sizeTier})`);
   revalidatePath("/secretariat/shortlisting");
   revalidatePath("/secretariat");
   revalidatePath("/applicant");

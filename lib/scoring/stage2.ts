@@ -3,8 +3,7 @@
  * Verified against the doc's own worked example (Alpha Manufacturing Ltd,
  * section 11.4): Juror 1's individual Verified Score = 67.05%, and Pillar
  * B's Panel Pillar Score (mean of 3.50/3.00/3.70) = 3.40, contributing
- * 10.20%. lib/mock/store.ts seeds that exact example so this logic is
- * checked against a ground truth, not just self-consistent.
+ * 10.20% — checked against a ground truth, not just self-consistent.
  */
 
 import { PILLAR_SCORE_WEIGHTS } from "@/types/domain";

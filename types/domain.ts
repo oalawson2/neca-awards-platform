@@ -4,10 +4,10 @@
  * Questionnaire (source document — treat it as authoritative over this
  * file's comments wherever they might drift).
  *
- * This is the shape the mock data layer (lib/mock/store.ts) returns today
- * and what real Supabase-backed queries will return once the schema
- * exists (being built in parallel — see README). Keep this file the
- * single source of truth for shapes used across portals.
+ * This is the shape every lib/data/*.ts query returns, mapped from the
+ * real Supabase schema (see NECA_Supabase_Schema_Reference.md) — kept as
+ * the single source of truth for shapes used across portals, independent
+ * of the underlying table/column names.
  */
 
 // ===========================================================================

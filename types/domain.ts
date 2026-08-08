@@ -17,10 +17,21 @@
 // handled so the rest of the app still has something to demo against.
 // ===========================================================================
 
+/**
+ * Real data has a 2-level hierarchy (21 sector_categories -> 183 sectors,
+ * see NECA_Supabase_Schema_Reference.md) — categoryId/categoryName are
+ * carried on the flat Sector for display/grouping (Section A's dropdown,
+ * the Secretariat sectors admin screen) without forcing every other
+ * consumer that only ever needed `.id`/`.name` (scoring, shortlisting,
+ * panel assignment) to deal with a separate hierarchy type.
+ */
 export interface Sector {
   id: string;
   name: string;
   order: number;
+  categoryId: string;
+  categoryName: string;
+  isActive: boolean;
 }
 
 // ===========================================================================

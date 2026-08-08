@@ -10,7 +10,7 @@ export default async function ApplicantReportPage() {
   if (!user) redirect("/login");
 
   const application = await getApplicationForApplicantUser(user.id);
-  if (!application) redirect("/login");
+  if (!application) redirect("/applicant/profile");
 
   /**
    * Gated on the report row's own release state, not application.status —

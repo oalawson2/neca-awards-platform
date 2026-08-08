@@ -8,7 +8,7 @@ export default async function ApplicantSubmittedPage() {
   if (!user) redirect("/login");
 
   const application = await getApplicationForApplicantUser(user.id);
-  if (!application) redirect("/login");
+  if (!application) redirect("/applicant/profile");
 
   return (
     <div className="px-6 py-14 sm:py-17 flex flex-col items-center text-center">

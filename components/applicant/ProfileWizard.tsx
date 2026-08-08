@@ -25,12 +25,12 @@ import type {
 const STEP_LABELS = ["Organisation details", "Structure & coverage", "Contact & history", "Eligibility declarations"];
 
 export function ProfileWizard({
-  applicationId,
+  applicationId: initialApplicationId,
   initialOrg,
   initialDeclarations,
   sectors,
 }: {
-  applicationId: string;
+  applicationId: string | null;
   initialOrg: Organization;
   initialDeclarations: EligibilityDeclarations;
   sectors: Sector[];
@@ -39,6 +39,9 @@ export function ProfileWizard({
   const [step, setStep] = useState(0);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // Set once the first save creates the application — every save after
+  // that updates the same row instead of trying to create another.
+  const [applicationId, setApplicationId] = useState(initialApplicationId);
   const [fields, setFields] = useState({
     name: initialOrg.name,
     rcNumber: initialOrg.rcNumber,
@@ -85,6 +88,7 @@ export function ProfileWizard({
       setError(result.error ?? "Could not save profile.");
       return false;
     }
+    if (result.applicationId) setApplicationId(result.applicationId);
     return true;
   }
 
@@ -169,10 +173,19 @@ export function ProfileWizard({
               <Label>Sector</Label>
               <Select value={fields.sectorId} onChange={(e) => update("sectorId", e.target.value)}>
                 <option value="">Select a sector</option>
-                {sectors.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
+                {Object.entries(
+                  sectors.reduce<Record<string, Sector[]>>((groups, s) => {
+                    (groups[s.categoryName] ??= []).push(s);
+                    return groups;
+                  }, {})
+                ).map(([categoryName, categorySectors]) => (
+                  <optgroup key={categoryName} label={categoryName}>
+                    {categorySectors.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </Select>
             </div>

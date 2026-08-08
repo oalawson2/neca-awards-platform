@@ -1,88 +1,161 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { store, generateId } from "@/lib/mock/store";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentUser } from "@/lib/auth/session";
 import { logAction } from "@/lib/data/audit";
 import type { EligibilityDeclarations, Organization } from "@/types/domain";
 
 export type OrganizationProfileInput = Omit<Organization, "id">;
 
-/**
- * Recomputes whether an application should be flagged for Secretariat
- * review, from its own eligibility declarations. Doc section 9.1 also
- * flags on "G2 = No" (Section G — "complies with all applicable local
- * laws...") — G2 doesn't exist as an answerable item until the Sections
- * B–I question engine is built (task #27), so this only checks
- * declarations for now. Whoever builds task #27 needs to extend this
- * function to also check G2 once that answer exists, not add a second,
- * separate flagging path.
- */
-function recomputeEligibilityFlag(applicationId: string) {
-  const app = store.applications.find((a) => a.id === applicationId);
-  if (!app) return;
-
-  const failedDeclaration = Object.values(app.eligibilityDeclarations).some((v) => v === false);
-  const existing = store.eligibilityReviews.find((r) => r.applicationId === applicationId && r.status === "open");
-
-  if (failedDeclaration && !existing) {
-    store.eligibilityReviews.push({
-      id: generateId("elig"),
-      applicationId,
-      reasons: ["declaration_unchecked"],
-      status: "open",
-      createdAt: new Date().toISOString(),
-      resolvedAt: null,
-    });
-    app.eligibilityFlagged = true;
-  } else if (!failedDeclaration && existing && existing.reasons.every((r) => r === "declaration_unchecked")) {
-    existing.status = "resolved";
-    existing.resolvedAt = new Date().toISOString();
-    app.eligibilityFlagged = false;
-  } else {
-    app.eligibilityFlagged = !!existing;
-  }
-}
-
 export interface SaveProfileResult {
   success: boolean;
   error?: string;
+  /** Present on success — the caller (ProfileWizard) needs this on first save, when it didn't have one yet. */
+  applicationId?: string;
+}
+
+function toDbDeclarations(d: EligibilityDeclarations) {
+  return {
+    legally_registered_nigeria: d.legallyRegistered,
+    tax_compliant: d.taxCompliant,
+    no_regulatory_sanction: d.notUnderSanction,
+    information_accurate: d.infoAccurate,
+  };
 }
 
 /**
- * Section A save. Duplicate RC number is blocked here (email is already
- * blocked at sign-up — see lib/auth/actions.ts) — "one submission per
- * organisation" (doc section 3, Stage 0). A failed eligibility
- * declaration flags the application for Secretariat review but never
- * blocks saving or, later, submission (doc section 9.1) — it's recorded,
- * not enforced as a gate.
+ * `eligibility_reviews` has no INSERT/UPDATE policy for applicants at all
+ * (only `eligibility_reviews_secretariat`, ALL commands gated on
+ * is_secretariat()) — an applicant's own session can never create the
+ * review record their own failed declaration is supposed to produce.
+ * Uses the service-role client for just this write, the same justified
+ * exception as audit_log (see lib/supabase/admin.ts) — the applicant-
+ * visible signal (applications.eligibility_review_needed) is still set
+ * through their own normal, RLS-scoped write below.
+ */
+async function syncEligibilityReview(applicationId: string, failedDeclaration: boolean) {
+  const admin = createAdminClient();
+  const { data: existing } = await admin
+    .from("eligibility_reviews")
+    .select("id")
+    .eq("application_id", applicationId)
+    .eq("status", "pending")
+    .eq("reason", "declaration_unchecked")
+    .maybeSingle();
+
+  if (failedDeclaration && !existing) {
+    await admin.from("eligibility_reviews").insert({
+      application_id: applicationId,
+      reason: "declaration_unchecked",
+      status: "pending",
+    });
+  } else if (!failedDeclaration && existing) {
+    await admin.from("eligibility_reviews").update({ status: "resolved", resolved_at: new Date().toISOString() }).eq("id", existing.id);
+  }
+}
+
+/**
+ * Section A save — now create-or-update depending on whether the
+ * applicant already has an application. Self-signup no longer creates an
+ * organization/application row (see lib/auth/actions.ts's docstring) — the
+ * first successful save here does, deferred until enough fields exist to
+ * satisfy the real schema's NOT NULL columns (sector_id, org_size_tier,
+ * contact_name, contact_email, is_unionised — see the CREATE-path check
+ * below). "One submission per organisation" (rc_number + contact_email
+ * both unique) is enforced by the database itself now; a 23505 unique
+ * violation is surfaced as a friendly error rather than a raw DB error.
  */
 export async function saveOrganizationProfile(
-  applicationId: string,
+  applicationId: string | null,
   profile: OrganizationProfileInput,
   eligibilityDeclarations: EligibilityDeclarations
 ): Promise<SaveProfileResult> {
-  const app = store.applications.find((a) => a.id === applicationId);
-  if (!app) return { success: false, error: "Application not found." };
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Not signed in." };
 
+  const trimmedName = profile.name.trim();
   const trimmedRc = profile.rcNumber.trim();
-  if (trimmedRc) {
-    const duplicate = store.organizations.find(
-      (o) => o.id !== app.organizationId && o.rcNumber.trim().toLowerCase() === trimmedRc.toLowerCase()
-    );
-    if (duplicate) {
-      return { success: false, error: "An application already exists for this RC number." };
-    }
+  if (!trimmedName || !trimmedRc) {
+    return { success: false, error: "Organisation name and RC number are required." };
   }
 
-  const org = store.organizations.find((o) => o.id === app.organizationId);
-  if (!org) return { success: false, error: "Organisation not found." };
+  const supabase = await createClient();
+  const failedDeclaration = Object.values(eligibilityDeclarations).some((v) => v === false);
 
-  Object.assign(org, profile);
-  app.eligibilityDeclarations = eligibilityDeclarations;
-  recomputeEligibilityFlag(applicationId);
+  const orgFields = {
+    name: trimmedName,
+    rc_number: trimmedRc,
+    year_established_band: profile.yearEstablishedBand || null,
+    geographical_coverage: profile.geographicalCoverage || null,
+    ownership_structure: profile.ownershipStructure || null,
+    is_local_or_multinational: profile.localOrMultinational || null,
+    is_unionised: profile.isUnionised,
+    contact_name: profile.primaryContactName.trim(),
+    contact_email: profile.primaryContactEmail.trim(),
+    previous_participation: profile.previousParticipation.participated,
+    eligibility_declarations: toDbDeclarations(eligibilityDeclarations),
+  };
 
-  logAction(org.name || "Applicant", "Saved organisation profile for", org.name || applicationId);
+  if (applicationId) {
+    const { data: app } = await supabase.from("applications").select("organization_id").eq("id", applicationId).maybeSingle();
+    if (!app) return { success: false, error: "Application not found." };
+
+    const { error: orgError } = await supabase
+      .from("organizations")
+      .update({ ...orgFields, sector_id: profile.sectorId || undefined, org_size_tier: profile.sizeTier || undefined })
+      .eq("id", app.organization_id);
+    if (orgError) {
+      if (orgError.code === "23505") {
+        return { success: false, error: "An application already exists for this RC number or contact email." };
+      }
+      return { success: false, error: "Could not save profile." };
+    }
+
+    const { error: appError } = await supabase
+      .from("applications")
+      .update({ eligibility_review_needed: failedDeclaration })
+      .eq("id", applicationId);
+    if (!appError) await syncEligibilityReview(applicationId, failedDeclaration);
+
+    logAction(trimmedName, "Saved organisation profile for", trimmedName);
+    revalidatePath("/applicant/profile");
+    revalidatePath("/applicant");
+    return { success: true, applicationId };
+  }
+
+  if (!profile.sectorId || !profile.sizeTier || !orgFields.contact_name || !orgFields.contact_email) {
+    return {
+      success: false,
+      error: "Complete organisation name, RC number, sector, size, and contact details before your first save.",
+    };
+  }
+
+  const { data: newOrg, error: orgInsertError } = await supabase
+    .from("organizations")
+    .insert({ ...orgFields, sector_id: profile.sectorId, org_size_tier: profile.sizeTier, created_by: user.id })
+    .select("id")
+    .single();
+  if (orgInsertError || !newOrg) {
+    if (orgInsertError?.code === "23505") {
+      return { success: false, error: "An application already exists for this RC number or contact email." };
+    }
+    return { success: false, error: "Could not create your organisation profile." };
+  }
+
+  const { data: newApp, error: appInsertError } = await supabase
+    .from("applications")
+    .insert({ organization_id: newOrg.id, eligibility_review_needed: failedDeclaration })
+    .select("id")
+    .single();
+  if (appInsertError || !newApp) {
+    return { success: false, error: "Organisation saved, but couldn't start your application. Try again." };
+  }
+  await syncEligibilityReview(newApp.id, failedDeclaration);
+
+  logAction(trimmedName, "Created organisation profile for", trimmedName);
   revalidatePath("/applicant/profile");
   revalidatePath("/applicant");
-  return { success: true };
+  return { success: true, applicationId: newApp.id };
 }

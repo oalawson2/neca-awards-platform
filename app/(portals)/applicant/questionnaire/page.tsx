@@ -9,7 +9,7 @@ export default async function ApplicantQuestionnairePage() {
   if (!user) redirect("/login");
 
   const application = await getApplicationForApplicantUser(user.id);
-  if (!application) redirect("/login");
+  if (!application) redirect("/applicant/profile");
   if (!application.organization.name) redirect("/applicant/profile");
 
   const answers = await getAnswers(application.id);

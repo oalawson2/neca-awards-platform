@@ -10,7 +10,7 @@ export default async function ApplicantReviewPage() {
   if (!user) redirect("/login");
 
   const application = await getApplicationForApplicantUser(user.id);
-  if (!application) redirect("/login");
+  if (!application) redirect("/applicant/profile");
 
   const [progress, checklistStatus] = await Promise.all([
     getQuestionnaireProgress(application.id),

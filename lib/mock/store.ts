@@ -77,22 +77,20 @@ function nowIso(offsetDays = 0) {
 }
 
 /**
- * The real 21-category/183-sector taxonomy is already seeded in the live
- * Supabase database (sector_categories + sectors tables), but this
- * sandbox's network egress is blocked from reaching that project (proxy
- * denies the host outright), so those real names can't be pulled in
- * here — and they're deliberately not fabricated. These three
- * placeholder names are synthetic on purpose — never mistake them for
- * real NECA sectors — and exist only so the rest of the mock data
- * (applications, panel assignments, shortlist config) has something to
- * attach to while the app still runs in mock mode. Once Section 14's
- * real Supabase integration is live, sector reads come straight from the
- * database and this seed becomes irrelevant for that purpose.
+ * lib/data/sectors.ts now reads the real 21-category/183-sector taxonomy
+ * straight from Supabase (sector_categories + sectors, task #44) — these
+ * three placeholder names are synthetic on purpose and stay ONLY as the
+ * FK target for the rest of this file's still-mock seed data (panels,
+ * shortlist config, panel-sector assignments), whose own swap-to-real
+ * tasks (#48/#52/#53) haven't landed yet. Never mistake these for real
+ * NECA sectors, and don't let this array's continued existence read as
+ * "sectors aren't real yet" — they are, everywhere except this file's own
+ * demo data.
  */
 const SECTORS: Sector[] = [
-  { id: "sector-placeholder-a", name: "Placeholder Sector A", order: 1 },
-  { id: "sector-placeholder-b", name: "Placeholder Sector B", order: 2 },
-  { id: "sector-placeholder-c", name: "Placeholder Sector C", order: 3 },
+  { id: "sector-placeholder-a", name: "Placeholder Sector A", order: 1, categoryId: "cat-placeholder", categoryName: "Placeholder Category", isActive: true },
+  { id: "sector-placeholder-b", name: "Placeholder Sector B", order: 2, categoryId: "cat-placeholder", categoryName: "Placeholder Category", isActive: true },
+  { id: "sector-placeholder-c", name: "Placeholder Sector C", order: 3, categoryId: "cat-placeholder", categoryName: "Placeholder Category", isActive: true },
 ];
 
 /** Deterministic pseudo-random in [0,1) — stable seed data, no Math.random(). */

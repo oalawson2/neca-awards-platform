@@ -21,7 +21,7 @@ export default async function ApplicantDashboardPage() {
   if (!user) redirect("/login");
 
   const application = await getApplicationForApplicantUser(user.id);
-  if (!application) redirect("/login");
+  if (!application) redirect("/applicant/profile");
 
   const interviewSession = await getInterviewSession(application.id);
   const nextStepHref = !application.organization.name ? "/applicant/profile" : "/applicant/questionnaire";

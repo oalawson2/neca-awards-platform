@@ -1,6 +1,7 @@
-import { getSectors } from "@/lib/data/sectors";
+import { getSectors, getSectorCategories } from "@/lib/data/sectors";
 import { PILLARS, itemsForPillar } from "@/lib/mock/framework";
 import { AddSectorControl } from "@/components/secretariat/AddSectorControl";
+import { DeactivateSectorButton } from "@/components/secretariat/DeactivateSectorButton";
 import { Badge } from "@/components/ui/Badge";
 
 /**
@@ -11,8 +12,15 @@ import { Badge } from "@/components/ui/Badge";
  * IS Secretariat-owned — see task #24's data model) is unchanged.
  */
 export default async function AssessmentFrameworkPage() {
-  const sectors = await getSectors();
+  const [sectors, categories] = await Promise.all([getSectors(true), getSectorCategories()]);
   const scoredPillars = PILLARS.filter((p) => p.scored);
+
+  const byCategory = new Map<string, typeof sectors>();
+  for (const sector of sectors) {
+    const list = byCategory.get(sector.categoryName) ?? [];
+    list.push(sector);
+    byCategory.set(sector.categoryName, list);
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -62,17 +70,27 @@ export default async function AssessmentFrameworkPage() {
 
         <div className="lg:w-75 border-t lg:border-t-0 lg:border-l border-border p-6 sm:p-7 overflow-y-auto flex-shrink-0">
           <div className="flex justify-between items-center mb-4">
-            <div className="text-xs font-bold text-[#AEB1BC]">SECTORS ({sectors.length})</div>
-            <AddSectorControl />
+            <div className="text-xs font-bold text-[#AEB1BC]">SECTORS ({sectors.filter((s) => s.isActive).length} active)</div>
+            <AddSectorControl categories={categories} />
           </div>
-          <div className="flex flex-col gap-1.5 text-[13px]">
-            {sectors.map((s) => (
-              <div key={s.id} className="px-3 py-2.5 rounded-[10px] bg-bg">
-                {s.name}
-              </div>
+          <div className="flex flex-col gap-3 text-[13px]">
+            {[...byCategory.entries()].map(([categoryName, categorySectors]) => (
+              <details key={categoryName} className="group">
+                <summary className="cursor-pointer text-xs font-bold text-navy-dark mb-1.5">
+                  {categoryName} ({categorySectors.length})
+                </summary>
+                <div className="flex flex-col gap-1.5 mt-1.5">
+                  {categorySectors.map((s) => (
+                    <div key={s.id} className="px-3 py-2.5 rounded-[10px] bg-bg flex items-center justify-between gap-2">
+                      <span className={s.isActive ? undefined : "text-text-muted line-through"}>{s.name}</span>
+                      <DeactivateSectorButton sectorId={s.id} isActive={s.isActive} />
+                    </div>
+                  ))}
+                </div>
+              </details>
             ))}
             {sectors.length === 0 && (
-              <div className="text-xs text-text-muted">No sectors configured yet — add NECA&rsquo;s real sector list here.</div>
+              <div className="text-xs text-text-muted">No sectors configured yet.</div>
             )}
           </div>
           <p className="text-xs text-[#AEB1BC] mt-4 leading-relaxed">

@@ -9,7 +9,7 @@ export default async function ApplicantDocumentsPage() {
   if (!user) redirect("/login");
 
   const application = await getApplicationForApplicantUser(user.id);
-  if (!application) redirect("/login");
+  if (!application) redirect("/applicant/profile");
 
   const groups = await getChecklistGrouped(application.id);
 

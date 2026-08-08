@@ -9,7 +9,7 @@ export default async function ApplicantInterviewPage() {
   if (!user) redirect("/login");
 
   const application = await getApplicationForApplicantUser(user.id);
-  if (!application) redirect("/login");
+  if (!application) redirect("/applicant/profile");
 
   const [slots, bookedSlot, session] = await Promise.all([
     getBookableSlotsForApplication(application.id),

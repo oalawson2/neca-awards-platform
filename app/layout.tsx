@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "NECA Employers' Excellence Awards",
-  description: "Applicant, Secretariat, and Jury portal for the NECA Employers' Excellence Awards",
+  description: "Nigeria's national recognition for employers who lead on governance, people practice, and responsible business. Apply now.",
 };
 
 export default function RootLayout({

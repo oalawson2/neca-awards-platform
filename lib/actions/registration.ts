@@ -150,6 +150,7 @@ export async function saveOrganizationProfile(
     .select("id")
     .single();
   if (appInsertError || !newApp) {
+    console.error("[saveOrganizationProfile] applications insert error:", JSON.stringify(appInsertError));
     return { success: false, error: "Organisation saved, but couldn't start your application. Try again." };
   }
   await syncEligibilityReview(newApp.id, failedDeclaration);

@@ -44,11 +44,12 @@ async function ensureProfile(
   supabase: Awaited<ReturnType<typeof createClient>>,
   user: { id: string; email: string }
 ): Promise<{ role: UserRole } | { error: string }> {
-  const { data: existing } = await supabase
+  const { data: existing, error: selectError } = await supabase
     .from("profiles")
     .select("role")
     .eq("id", user.id)
     .maybeSingle();
+  if (selectError) console.error("[ensureProfile] select error:", JSON.stringify(selectError));
   if (existing) return { role: existing.role };
 
   const { data: created, error } = await supabase
@@ -57,11 +58,13 @@ async function ensureProfile(
     .select("role")
     .single();
   if (created) return { role: created.role };
+  if (error) console.error("[ensureProfile] insert error:", JSON.stringify(error));
 
   if (error?.code === "23505") {
     // Lost a race with the trigger between our select and insert — the row
     // exists now, so re-read it instead of treating this as a failure.
-    const { data: refetched } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+    const { data: refetched, error: refetchError } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+    if (refetchError) console.error("[ensureProfile] refetch error:", JSON.stringify(refetchError));
     if (refetched) return { role: refetched.role };
   }
 

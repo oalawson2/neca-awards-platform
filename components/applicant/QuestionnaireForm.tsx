@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -26,7 +26,12 @@ export function QuestionnaireForm({
   const [answersByItem, setAnswersByItem] = useState<Record<string, AssessmentAnswer>>(
     Object.fromEntries(initialAnswers.map((a) => [a.itemId, a]))
   );
-  const [, startTransition] = useTransition();
+  const [saveErrors, setSaveErrors] = useState<Record<string, string>>({});
+  const [isPending, startTransition] = useTransition();
+  // Every in-flight saveAnswer() call, keyed by itemId — Continue/pillar
+  // navigation awaits all of these first so a save can never be silently
+  // abandoned mid-flight by the user moving on before it resolves.
+  const pendingSaves = useRef<Record<string, Promise<unknown>>>({});
 
   const pillar = SCORED_PILLARS[pillarIndex];
   const items = effectiveItemsForPillar(pillar.code, isUnionised);
@@ -40,16 +45,23 @@ export function QuestionnaireForm({
   function handleChange(itemId: string, value: AnswerValue, isNA: boolean, naJustification: string) {
     const next: AssessmentAnswer = { applicationId, itemId, value, isNA, naJustification: isNA ? naJustification : undefined };
     setAnswersByItem((prev) => ({ ...prev, [itemId]: next }));
-    startTransition(() => {
-      saveAnswer(applicationId, itemId, value, isNA, naJustification);
+    setSaveErrors((e) => ({ ...e, [itemId]: "" }));
+    startTransition(async () => {
+      const promise = saveAnswer(applicationId, itemId, value, isNA, naJustification);
+      pendingSaves.current[itemId] = promise;
+      const result = await promise;
+      delete pendingSaves.current[itemId];
+      if (!result.success) setSaveErrors((e) => ({ ...e, [itemId]: result.error ?? "Could not save your answer." }));
     });
   }
 
-  function goToPillar(index: number) {
+  async function goToPillar(index: number) {
+    await Promise.all(Object.values(pendingSaves.current));
     setPillarIndex(Math.max(0, Math.min(SCORED_PILLARS.length - 1, index)));
   }
 
-  function continueOrFinish() {
+  async function continueOrFinish() {
+    await Promise.all(Object.values(pendingSaves.current));
     if (pillarIndex < SCORED_PILLARS.length - 1) {
       goToPillar(pillarIndex + 1);
     } else {
@@ -106,24 +118,26 @@ export function QuestionnaireForm({
           {items.map((item) => {
             const answer = answersByItem[item.id];
             return (
-              <AssessmentItemField
-                key={item.id}
-                item={item}
-                value={answer?.value ?? null}
-                isNA={answer?.isNA ?? false}
-                naJustification={answer?.naJustification ?? ""}
-                onChange={(value, isNA, naJustification) => handleChange(item.id, value, isNA, naJustification)}
-              />
+              <div key={item.id}>
+                <AssessmentItemField
+                  item={item}
+                  value={answer?.value ?? null}
+                  isNA={answer?.isNA ?? false}
+                  naJustification={answer?.naJustification ?? ""}
+                  onChange={(value, isNA, naJustification) => handleChange(item.id, value, isNA, naJustification)}
+                />
+                {saveErrors[item.id] && <div className="text-xs text-error mt-1.5">{saveErrors[item.id]}</div>}
+              </div>
             );
           })}
         </div>
 
         <div className="mt-9 flex justify-between gap-3">
-          <Button variant="secondary" onClick={() => goToPillar(pillarIndex - 1)} disabled={pillarIndex === 0}>
+          <Button variant="secondary" onClick={() => goToPillar(pillarIndex - 1)} disabled={pillarIndex === 0 || isPending}>
             ← Previous
           </Button>
-          <Button onClick={continueOrFinish}>
-            {pillarIndex < SCORED_PILLARS.length - 1 ? "Save & continue →" : "Continue to documents →"}
+          <Button onClick={continueOrFinish} disabled={isPending}>
+            {isPending ? "Saving…" : pillarIndex < SCORED_PILLARS.length - 1 ? "Save & continue →" : "Continue to documents →"}
           </Button>
         </div>
       </div>

@@ -17,6 +17,11 @@
 # fork enough threads for the default pool size and fails partway through
 # compiling with "Resource temporarily unavailable". See next.config.ts's
 # experimental.cpus for the equivalent cap on the Node-side worker pool.
+#
+# Same requirement as deploy.sh: a real .env.local must already exist at
+# the app root before `npm run build` runs here, or NEXT_PUBLIC_* vars
+# compile in as undefined (cPanel's env var UI doesn't reach this deploy
+# task's shell) — see README's "Deployment" section for the full story.
 deployment:
   tasks:
     - export NODEVENV_ACTIVATE=/home/necasmwo/nodevenv/neca-app/24/bin/activate

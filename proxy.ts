@@ -21,9 +21,26 @@ import type { UserRole } from "./types/auth";
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
+  // NEXT_PUBLIC_ vars are inlined by webpack at `next build` time, not
+  // read from the running process's env — so if this ever fires, the fix
+  // is to make sure the var is present *when `npm run build` runs*
+  // (a .env.local/.env.production file on disk), not just set in cPanel's
+  // Node App environment variables UI, which only affects the already-
+  // built server process. See README's "Deployment" section.
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) {
+    throw new Error(
+      `proxy.ts: missing ${[
+        !process.env.NEXT_PUBLIC_SUPABASE_URL && "NEXT_PUBLIC_SUPABASE_URL",
+        !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY && "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+      ]
+        .filter(Boolean)
+        .join(", ")} at build time — this was compiled into the app, not read at runtime.`
+    );
+  }
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
     {
       cookies: {
         getAll() {

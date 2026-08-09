@@ -85,6 +85,25 @@ Open http://localhost:3000.
 
 ## Deployment
 
+**One-time setup, before the first deploy:** create a real `.env.local`
+at the application root (`/home/necasmwo/neca-app/.env.local`, same
+contents as `.env.example` but filled in) directly on the server —
+never commit it. This is required *in addition to* cPanel's Setup
+Node.js App environment variables UI, not instead of it: cPanel's UI is
+only injected into the already-running app process, but `NEXT_PUBLIC_*`
+vars (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`)
+get inlined by webpack into the compiled app *at `next build` time* —
+including into `proxy.ts`'s compiled output, which runs on every
+request. `deploy.sh` builds over SSH, a shell that never sees cPanel's
+env var UI, so without this file the build silently bakes in `undefined`
+for those two vars — permanently, until the next build — and the
+symptom is `Error: Your project's URL and Key are required to create a
+Supabase client!` thrown from `.next/server/middleware.js`, persisting
+no matter how many times you set the vars in cPanel and Stop/Start the
+app afterward. `deploy.sh` now checks for this file and refuses to build
+without it, so this can't silently recur. Once placed, it's untracked
+and survives every future `git pull`.
+
 cPanel's own Git Version Control deploy feature couldn't be used on this
 host, so deploys are manual: SSH into the `neca-app` Node.js App's
 application root (`/home/necasmwo/neca-app`, already tracking this repo)

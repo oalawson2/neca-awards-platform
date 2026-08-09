@@ -27,6 +27,19 @@ export async function proxy(request: NextRequest) {
   // (a .env.local/.env.production file on disk), not just set in cPanel's
   // Node App environment variables UI, which only affects the already-
   // built server process. See README's "Deployment" section.
+  // Unconditional, every request — prints to stderr.log regardless of
+  // which branch below fires, so a running deployment's actual in-memory
+  // state is visible directly rather than inferred from file contents.
+  console.error(
+    "[proxy.ts diag]",
+    "URL:",
+    typeof process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_URL?.length ?? "n/a",
+    "KEY:",
+    typeof process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.length ?? "n/a"
+  );
+
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) {
     throw new Error(
       `proxy.ts: missing ${[

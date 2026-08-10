@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { logAction } from "@/lib/data/audit";
 import type { UserRole } from "@/types/auth";
 
 export interface AuthResult {
@@ -44,12 +45,22 @@ async function ensureProfile(
   supabase: Awaited<ReturnType<typeof createClient>>,
   user: { id: string; email: string }
 ): Promise<{ role: UserRole } | { error: string }> {
+  // Collected regardless of outcome, and only ever surfaced (via
+  // logAction below) if every recovery path below still fails — the
+  // generic user-facing message never changes, but whoever's diagnosing
+  // it gets the real Postgres error without needing server log access.
+  // The exact class of bug this exists for (an RLS helper function
+  // losing its EXECUTE grant, surfacing as "permission denied for
+  // function X" here even though the row demonstrably exists) has
+  // already happened twice.
+  const diagnostics: string[] = [];
+
   const { data: existing, error: selectError } = await supabase
     .from("profiles")
     .select("role")
     .eq("id", user.id)
     .maybeSingle();
-  if (selectError) console.error("[ensureProfile] select error:", JSON.stringify(selectError));
+  if (selectError) diagnostics.push(`select: ${selectError.code} ${selectError.message}`);
   if (existing) return { role: existing.role };
 
   const { data: created, error } = await supabase
@@ -58,15 +69,23 @@ async function ensureProfile(
     .select("role")
     .single();
   if (created) return { role: created.role };
-  if (error) console.error("[ensureProfile] insert error:", JSON.stringify(error));
+  if (error) diagnostics.push(`insert: ${error.code} ${error.message}`);
 
   if (error?.code === "23505") {
     // Lost a race with the trigger between our select and insert — the row
     // exists now, so re-read it instead of treating this as a failure.
     const { data: refetched, error: refetchError } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
-    if (refetchError) console.error("[ensureProfile] refetch error:", JSON.stringify(refetchError));
+    if (refetchError) diagnostics.push(`refetch: ${refetchError.code} ${refetchError.message}`);
     if (refetched) return { role: refetched.role };
   }
+
+  const detail = diagnostics.join(" | ") || "no error details captured";
+  console.error("[ensureProfile] failed for", user.email, user.id, "-", detail);
+  // Service-role write (bypasses RLS) so this lands even when the failure
+  // itself is an RLS/permission problem on the caller's own session —
+  // visible to Secretariat at /secretariat/audit-log, no server access
+  // needed to diagnose.
+  await logAction("System", "Profile setup failed for", `${user.email} (${user.id}) — ${detail}`);
 
   return { error: "Your account was created but we couldn't finish setting it up. Contact the Secretariat." };
 }

@@ -111,6 +111,8 @@ export async function saveOrganizationProfile(
       if (orgError.code === "23505") {
         return { success: false, error: "An application already exists for this RC number or contact email." };
       }
+      console.error("[saveOrganizationProfile] organizations update error:", JSON.stringify(orgError));
+      await logAction("System", "Organisation profile save failed for", `${trimmedName} — update: ${orgError.code} ${orgError.message}`);
       return { success: false, error: "Could not save profile." };
     }
 
@@ -142,6 +144,8 @@ export async function saveOrganizationProfile(
     if (orgInsertError?.code === "23505") {
       return { success: false, error: "An application already exists for this RC number or contact email." };
     }
+    console.error("[saveOrganizationProfile] organizations insert error:", JSON.stringify(orgInsertError));
+    await logAction("System", "Organisation profile creation failed for", `${trimmedName} — insert: ${orgInsertError?.code} ${orgInsertError?.message}`);
     return { success: false, error: "Could not create your organisation profile." };
   }
 
@@ -152,6 +156,7 @@ export async function saveOrganizationProfile(
     .single();
   if (appInsertError || !newApp) {
     console.error("[saveOrganizationProfile] applications insert error:", JSON.stringify(appInsertError));
+    await logAction("System", "Application creation failed for", `${trimmedName} — insert: ${appInsertError?.code} ${appInsertError?.message}`);
     return { success: false, error: "Organisation saved, but couldn't start your application. Try again." };
   }
   await syncEligibilityReview(newApp.id, failedDeclaration);

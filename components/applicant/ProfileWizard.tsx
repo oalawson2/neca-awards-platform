@@ -48,6 +48,7 @@ export function ProfileWizard({
     yearEstablishedBand: initialOrg.yearEstablishedBand,
     sectorId: initialOrg.sectorId,
     sizeTier: initialOrg.sizeTier,
+    employeeCount: initialOrg.employeeCount,
     geographicalCoverage: initialOrg.geographicalCoverage,
     ownershipStructure: initialOrg.ownershipStructure,
     localOrMultinational: initialOrg.localOrMultinational,
@@ -198,6 +199,15 @@ export function ProfileWizard({
                   </option>
                 ))}
               </Select>
+            </div>
+            <div>
+              <Label>Number of employees</Label>
+              <Input
+                type="number"
+                min={0}
+                value={fields.employeeCount ?? ""}
+                onChange={(e) => update("employeeCount", e.target.value === "" ? null : Number(e.target.value))}
+              />
             </div>
           </div>
         )}

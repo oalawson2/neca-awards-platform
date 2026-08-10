@@ -38,7 +38,7 @@ export async function submitStage1Application(applicationId: string): Promise<Su
 
   const { data: org } = await supabase
     .from("organizations")
-    .select("id, name, rc_number, sector_id, is_unionised")
+    .select("id, name, rc_number, sector_id, is_unionised, employee_count")
     .eq("id", app.organization_id)
     .maybeSingle();
   if (!org) return { success: false, error: "Organisation not found." };
@@ -67,7 +67,7 @@ export async function submitStage1Application(applicationId: string): Promise<Su
     };
   }
 
-  const { overallScore } = computeStage1Score(PILLARS, org.is_unionised, answers, [], org.sector_id);
+  const { overallScore } = computeStage1Score(PILLARS, org.is_unionised, answers, [], org.sector_id, org.employee_count);
 
   const { error: updateError } = await supabase
     .from("applications")

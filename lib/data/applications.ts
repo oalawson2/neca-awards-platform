@@ -12,7 +12,7 @@ export interface ApplicationWithOrg extends Application {
 // outright, since dropping it is a product decision, not an engineering
 // one — flagging this clearly rather than silently discarding it.
 const ORG_COLUMNS =
-  "id, name, rc_number, year_established_band, sector_id, org_size_tier, geographical_coverage, ownership_structure, is_local_or_multinational, is_unionised, contact_name, contact_email, previous_participation, eligibility_declarations";
+  "id, name, rc_number, year_established_band, sector_id, org_size_tier, employee_count, geographical_coverage, ownership_structure, is_local_or_multinational, is_unionised, contact_name, contact_email, previous_participation, eligibility_declarations";
 
 const APPLICATION_COLUMNS = `id, organization_id, cycle_year, status, stage1_score, submitted_at, eligibility_review_needed, red_flag_count, organizations (${ORG_COLUMNS})`;
 
@@ -23,6 +23,7 @@ type OrgRow = {
   year_established_band: string | null;
   sector_id: string;
   org_size_tier: string;
+  employee_count: number | null;
   geographical_coverage: string | null;
   ownership_structure: string | null;
   is_local_or_multinational: string | null;
@@ -75,6 +76,7 @@ function mapOrg(row: OrgRow): Organization {
     yearEstablishedBand: (row.year_established_band ?? "") as Organization["yearEstablishedBand"],
     sectorId: row.sector_id,
     sizeTier: row.org_size_tier as Organization["sizeTier"],
+    employeeCount: row.employee_count,
     geographicalCoverage: (row.geographical_coverage ?? "") as Organization["geographicalCoverage"],
     ownershipStructure: (row.ownership_structure ?? "") as Organization["ownershipStructure"],
     localOrMultinational: (row.is_local_or_multinational ?? "local") as Organization["localOrMultinational"],

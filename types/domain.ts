@@ -195,6 +195,8 @@ export interface Organization {
   yearEstablishedBand: YearEstablishedBand;
   sectorId: string;
   sizeTier: OrgSizeTier;
+  /** Raw headcount, alongside (not replacing) sizeTier's category band — I5's youth internship ratio needs the actual number. */
+  employeeCount: number | null;
   geographicalCoverage: GeographicalCoverage;
   ownershipStructure: OwnershipStructure;
   localOrMultinational: "local" | "multinational";

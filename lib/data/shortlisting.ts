@@ -43,7 +43,7 @@ export async function getShortlistCategories(): Promise<ShortlistCategory[]> {
     supabase
       .from("applications")
       .select(
-        "id, organization_id, cycle_year, status, stage1_score, submitted_at, eligibility_review_needed, red_flag_count, organizations(id, name, rc_number, year_established_band, sector_id, org_size_tier, geographical_coverage, ownership_structure, is_local_or_multinational, is_unionised, contact_name, contact_email, previous_participation, eligibility_declarations, sectors(name))"
+        "id, organization_id, cycle_year, status, stage1_score, submitted_at, eligibility_review_needed, red_flag_count, organizations(id, name, rc_number, year_established_band, sector_id, org_size_tier, employee_count, geographical_coverage, ownership_structure, is_local_or_multinational, is_unionised, contact_name, contact_email, previous_participation, eligibility_declarations, sectors(name))"
       )
       .not("submitted_at", "is", null)
       .not("stage1_score", "is", null),
@@ -81,6 +81,7 @@ export async function getShortlistCategories(): Promise<ShortlistCategory[]> {
         yearEstablishedBand: (org.year_established_band ?? "") as never,
         sectorId: org.sector_id,
         sizeTier: org.org_size_tier as OrgSizeTier,
+        employeeCount: org.employee_count,
         geographicalCoverage: (org.geographical_coverage ?? "") as never,
         ownershipStructure: (org.ownership_structure ?? "") as never,
         localOrMultinational: (org.is_local_or_multinational ?? "local") as never,

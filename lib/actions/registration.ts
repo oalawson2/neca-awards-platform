@@ -87,6 +87,7 @@ export async function saveOrganizationProfile(
   const orgFields = {
     name: trimmedName,
     rc_number: trimmedRc,
+    employee_count: profile.employeeCount,
     year_established_band: profile.yearEstablishedBand || null,
     geographical_coverage: profile.geographicalCoverage || null,
     ownership_structure: profile.ownershipStructure || null,

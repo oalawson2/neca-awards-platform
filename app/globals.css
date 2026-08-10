@@ -49,9 +49,16 @@ h3,
   font-family: var(--font-heading);
 }
 
-a {
-  color: var(--color-info);
-}
-a:hover {
-  color: #2a3ecc;
+/* In the base layer (not the default unlayered cascade) so any Tailwind
+   text-color utility on an <a> — including LinkButton, sidebar nav links,
+   etc. — can override this default without needing `!important`. Cascade
+   layers always lose to unlayered rules regardless of specificity, which
+   is what silently broke every colored anchor before this was scoped. */
+@layer base {
+  a {
+    color: var(--color-info);
+  }
+  a:hover {
+    color: #2a3ecc;
+  }
 }

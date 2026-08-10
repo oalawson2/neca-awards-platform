@@ -74,7 +74,8 @@ export function AvailabilityGrid({ interviews }: { interviews: (InterviewSession
                   <Button
                     size="sm"
                     className="sm:col-span-3"
-                    disabled={isPending || !v.date || !v.time}
+                    disabled={!v.date || !v.time}
+                    loading={isPending}
                     onClick={() =>
                       startTransition(async () => {
                         setError(null);

@@ -60,7 +60,7 @@ export function ReportReviewForm({
       {!report ? (
         <div className="border border-border rounded-2xl p-6 text-center">
           <p className="text-sm text-text-muted mb-4">No report generated yet.</p>
-          <Button onClick={generate} disabled={isPending}>
+          <Button onClick={generate} loading={isPending}>
             Generate report
           </Button>
         </div>
@@ -119,15 +119,15 @@ export function ReportReviewForm({
 
       {report && (
         <div className="flex gap-3">
-          <Button variant="secondary" onClick={generate} disabled={isPending}>
+          <Button variant="secondary" onClick={generate} loading={isPending}>
             Regenerate
           </Button>
           {report.status !== "approved" && (
             <>
-              <Button variant="secondary" onClick={sendBack} disabled={isPending}>
+              <Button variant="secondary" onClick={sendBack} loading={isPending}>
                 Send back
               </Button>
-              <Button onClick={approve} disabled={isPending}>
+              <Button onClick={approve} loading={isPending}>
                 Approve &amp; release
               </Button>
             </>

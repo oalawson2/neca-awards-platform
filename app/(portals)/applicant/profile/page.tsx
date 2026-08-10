@@ -18,6 +18,7 @@ const BLANK_ORG: Organization = {
   rcNumber: "",
   yearEstablishedBand: "" as Organization["yearEstablishedBand"],
   sectorId: "",
+  sectorOtherDetail: null,
   sizeTier: "micro",
   employeeCount: null,
   geographicalCoverage: "" as Organization["geographicalCoverage"],

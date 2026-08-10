@@ -80,6 +80,7 @@ export async function getShortlistCategories(): Promise<ShortlistCategory[]> {
         rcNumber: org.rc_number,
         yearEstablishedBand: (org.year_established_band ?? "") as never,
         sectorId: org.sector_id,
+        sectorOtherDetail: null, // not selected in this view's query — irrelevant to ranking/shortlisting
         sizeTier: org.org_size_tier as OrgSizeTier,
         employeeCount: org.employee_count,
         geographicalCoverage: (org.geographical_coverage ?? "") as never,
@@ -104,12 +105,21 @@ export async function getShortlistCategories(): Promise<ShortlistCategory[]> {
       .map((a, idx) => ({ ...a, rank: idx + 1 }));
 
     const config = configs.find((c) => c.sectorId === sectorId && c.sizeTier === sizeTier) ?? null;
+    // Rank-based modes (count/percentage) always advance a fixed number.
+    // minimum_score is absolute — cutoffCount here is *derived* as "how
+    // many meet the threshold," not itself the criterion; applyShortlist
+    // still just does rank <= cutoffCount, which is equivalent since
+    // `ranked` is already score-sorted (everyone above the threshold is
+    // necessarily ranked above everyone below it) — including the
+    // legitimate 0 case (nobody met the minimum, nobody advances).
     const cutoffCount =
       config?.mode === "count"
         ? config.value
         : config?.mode === "percentage" && config.value !== null
           ? Math.max(1, Math.ceil((config.value / 100) * ranked.length))
-          : null;
+          : config?.mode === "minimum_score" && config.value !== null
+            ? ranked.filter((a) => (a.stage1Score ?? 0) >= config.value!).length
+            : null;
 
     categories.push({ sectorId, sectorName: sectorNames.get(sectorId) ?? sectorId, sizeTier, config, ranked, cutoffCount });
   }

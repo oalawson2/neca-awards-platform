@@ -194,6 +194,8 @@ export interface Organization {
   rcNumber: string;
   yearEstablishedBand: YearEstablishedBand;
   sectorId: string;
+  /** Free text captured only when sectorId is the "Other (Please Specify)" sector row. */
+  sectorOtherDetail: string | null;
   sizeTier: OrgSizeTier;
   /** Raw headcount, alongside (not replacing) sizeTier's category band — I5's youth internship ratio needs the actual number. */
   employeeCount: number | null;
@@ -402,7 +404,15 @@ export interface JurorConflict {
 // sector/size category. No hardcoded value: NECA hasn't decided this yet.
 // ===========================================================================
 
-export type ShortlistMode = "count" | "percentage";
+/**
+ * "count"/"percentage" are both rank-based: top N or top N% of the
+ * ranked pool advance, regardless of their absolute score. "minimum_score"
+ * is different — an absolute Stage 1 score threshold, independent of how
+ * many other applicants there are or how they rank against each other.
+ * Both a rank-based and an absolute-threshold mode are kept, since which
+ * one makes sense can differ by sector/size category.
+ */
+export type ShortlistMode = "count" | "percentage" | "minimum_score";
 
 export interface ShortlistConfig {
   id: string;

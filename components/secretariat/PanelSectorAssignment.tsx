@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Select } from "@/components/ui/Field";
+import { Spinner } from "@/components/ui/Button";
 import { assignSectorToPanel, unassignSectorFromPanel } from "@/lib/actions/panels";
 import type { Sector } from "@/types/domain";
 
@@ -40,7 +41,7 @@ export function PanelSectorAssignment({
               }
               className="text-navy/60 hover:text-navy"
             >
-              ✕
+              {isPending ? <Spinner className="w-2.5 h-2.5" /> : "✕"}
             </button>
           </span>
         ))}
@@ -63,8 +64,9 @@ export function PanelSectorAssignment({
                 if (!result.success) setError(result.error ?? "Could not assign sector.");
               })
             }
-            className="text-xs font-semibold text-info"
+            className="text-xs font-semibold text-info inline-flex items-center gap-1.5"
           >
+            {isPending && <Spinner className="w-3 h-3" />}
             + Add
           </button>
         </div>

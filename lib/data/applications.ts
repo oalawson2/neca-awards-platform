@@ -12,7 +12,7 @@ export interface ApplicationWithOrg extends Application {
 // outright, since dropping it is a product decision, not an engineering
 // one — flagging this clearly rather than silently discarding it.
 const ORG_COLUMNS =
-  "id, name, rc_number, year_established_band, sector_id, org_size_tier, employee_count, geographical_coverage, ownership_structure, is_local_or_multinational, is_unionised, contact_name, contact_email, previous_participation, eligibility_declarations";
+  "id, name, rc_number, year_established_band, sector_id, sector_other_detail, org_size_tier, employee_count, geographical_coverage, ownership_structure, is_local_or_multinational, is_unionised, contact_name, contact_email, previous_participation, eligibility_declarations";
 
 const APPLICATION_COLUMNS = `id, organization_id, cycle_year, status, stage1_score, submitted_at, eligibility_review_needed, red_flag_count, organizations (${ORG_COLUMNS})`;
 
@@ -22,6 +22,7 @@ type OrgRow = {
   rc_number: string;
   year_established_band: string | null;
   sector_id: string;
+  sector_other_detail: string | null;
   org_size_tier: string;
   employee_count: number | null;
   geographical_coverage: string | null;
@@ -75,6 +76,7 @@ function mapOrg(row: OrgRow): Organization {
     // widening the type everywhere it's consumed; ProfileWizard treats "" as "not yet chosen".
     yearEstablishedBand: (row.year_established_band ?? "") as Organization["yearEstablishedBand"],
     sectorId: row.sector_id,
+    sectorOtherDetail: row.sector_other_detail,
     sizeTier: row.org_size_tier as Organization["sizeTier"],
     employeeCount: row.employee_count,
     geographicalCoverage: (row.geographical_coverage ?? "") as Organization["geographicalCoverage"],

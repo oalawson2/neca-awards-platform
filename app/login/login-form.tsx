@@ -57,7 +57,7 @@ export function LoginForm() {
           Forgot password?
         </a>
       </div>
-      <Button type="submit" className="w-full" disabled={isPending}>
+      <Button type="submit" className="w-full" loading={isPending}>
         {isPending ? "Signing in…" : "Sign in"}
       </Button>
       <div className="text-center text-[13px] text-text-muted mt-5">

@@ -25,7 +25,7 @@ export function SectorWinnerPicker({ group }: { group: SectorWinnerGroup }) {
               <Button
                 size="sm"
                 variant="secondary"
-                disabled={isPending}
+                loading={isPending}
                 onClick={() => startTransition(async () => { await confirmSectorWinner(row.applicationId); })}
               >
                 Confirm as winner

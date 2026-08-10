@@ -4,9 +4,9 @@ import type { InputHTMLAttributes, TextareaHTMLAttributes, SelectHTMLAttributes,
 const FIELD_BASE =
   "w-full box-border px-3.5 py-3 border-[1.5px] border-[#E3E4EA] rounded-xl text-sm font-body focus:outline-none focus:border-navy transition-colors";
 
-export function Label({ children, error }: { children: ReactNode; error?: boolean }) {
+export function Label({ children, error, className }: { children: ReactNode; error?: boolean; className?: string }) {
   return (
-    <label className={cn("text-[13px] font-semibold block mb-[7px]", error ? "text-error" : "text-text")}>
+    <label className={cn("text-[13px] font-semibold block mb-[7px]", error ? "text-error" : "text-text", className)}>
       {children}
     </label>
   );

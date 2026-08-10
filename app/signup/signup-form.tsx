@@ -77,7 +77,7 @@ export function SignupForm() {
         onChange={(e) => setAgreeToTerms(e.target.checked)}
         label="I agree to the Data Privacy Statement and Terms of Participation."
       />
-      <Button type="submit" className="w-full" disabled={isPending}>
+      <Button type="submit" className="w-full" loading={isPending}>
         {isPending ? "Creating account…" : "Create account"}
       </Button>
       <div className="text-center text-[13px] text-text-muted mt-5">

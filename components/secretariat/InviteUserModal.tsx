@@ -64,7 +64,7 @@ export function InviteUserModal() {
           <Button variant="secondary" size="sm" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button size="sm" onClick={submit} disabled={isPending || !email}>
+          <Button size="sm" onClick={submit} disabled={!email} loading={isPending}>
             Send invite
           </Button>
         </div>

@@ -30,13 +30,18 @@ export default async function ApplicantSubmittedPage() {
       </div>
 
       <div className="mt-10 flex gap-3.5 flex-wrap justify-center">
-        <button
-          disabled
-          title="Receipt download is not wired up in this mock-data phase"
-          className="bg-white text-navy border-[1.5px] border-navy rounded-xl px-[22px] py-[13px] text-sm font-semibold opacity-50 cursor-not-allowed"
+        {/*
+          Plain <a>, not LinkButton/next/link — this points at a Route
+          Handler returning a PDF (Content-Disposition: attachment), and
+          Next's client-side router would try to soft-navigate to it as a
+          page instead of letting the browser download it.
+        */}
+        <a
+          href="/api/applicant/receipt"
+          className="bg-white text-navy border-[1.5px] border-navy rounded-xl px-[22px] py-[13px] text-sm font-semibold hover:bg-[#F1F1FB] transition-colors"
         >
           Download receipt
-        </button>
+        </a>
         <LinkButton href="/applicant">Return to dashboard</LinkButton>
       </div>
     </div>

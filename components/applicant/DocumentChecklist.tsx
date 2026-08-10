@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -9,33 +9,43 @@ import type { ChecklistGroup } from "@/lib/data/checklist";
 
 export function DocumentChecklist({ applicationId, groups }: { applicationId: string; groups: ChecklistGroup[] }) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
   const [uploadingId, setUploadingId] = useState<string | null>(null);
+  // Set the instant a given upload's response comes back successful — the
+  // "✓ Uploaded" state no longer waits on router.refresh()'s server
+  // round trip to land before showing, which used to leave a multi-second
+  // gap where the button just silently reverted to "Upload" (looking like
+  // nothing had happened) between the upload finishing and the refreshed
+  // props catching up. router.refresh() still runs, to bring doc.status
+  // and the mandatory-count in sync with the server — this is just what
+  // renders in the meantime.
+  const [locallyUploaded, setLocallyUploaded] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const allDocs = groups.flatMap((g) => g.documents);
   const mandatory = allDocs.filter((d) => d.track === "mandatory");
-  const mandatoryUploaded = mandatory.filter((d) => d.status === "uploaded").length;
-  const allMandatoryUploaded = mandatory.every((d) => d.status === "uploaded");
+  const mandatoryUploaded = mandatory.filter((d) => d.status === "uploaded" || locallyUploaded[d.id]).length;
+  const allMandatoryUploaded = mandatory.every((d) => d.status === "uploaded" || locallyUploaded[d.id]);
 
   function pickFile(documentId: string, itemId: string) {
     setErrors((e) => ({ ...e, [documentId]: "" }));
     const input = fileInputRefs.current[documentId];
     if (!input) return;
-    input.onchange = () => {
+    input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
       const formData = new FormData();
       formData.set("file", file);
       setUploadingId(documentId);
-      startTransition(async () => {
-        const result = await uploadDocument(applicationId, itemId, formData);
-        setUploadingId(null);
-        if (!result.success) setErrors((e) => ({ ...e, [documentId]: result.error ?? "Upload failed." }));
-        input.value = "";
-        router.refresh();
-      });
+      const result = await uploadDocument(applicationId, itemId, formData);
+      input.value = "";
+      if (result.success) {
+        setLocallyUploaded((u) => ({ ...u, [documentId]: file.name }));
+      } else {
+        setErrors((e) => ({ ...e, [documentId]: result.error ?? "Upload failed." }));
+      }
+      setUploadingId(null);
+      router.refresh();
     };
     input.click();
   }
@@ -75,12 +85,12 @@ export function DocumentChecklist({ applicationId, groups }: { applicationId: st
                     <div className="text-xs text-[#AEB1BC] mt-0.5">
                       Accepted: {doc.acceptedFileTypes.join(", ").toUpperCase()} · Max {doc.maxSizeMB}MB
                     </div>
-                    {doc.status === "uploaded" && doc.fileName && (
-                      <div className="text-xs text-success mt-0.5">{doc.fileName}</div>
+                    {(doc.fileName || locallyUploaded[doc.id]) && (
+                      <div className="text-xs text-success mt-0.5">{doc.fileName ?? locallyUploaded[doc.id]}</div>
                     )}
                     {errors[doc.id] && <div className="text-xs text-error mt-0.5">{errors[doc.id]}</div>}
                   </div>
-                  {doc.status === "uploaded" ? (
+                  {doc.status === "uploaded" || locallyUploaded[doc.id] ? (
                     <span className="text-xs font-semibold text-success flex-shrink-0">✓ Uploaded</span>
                   ) : (
                     <>
@@ -95,10 +105,10 @@ export function DocumentChecklist({ applicationId, groups }: { applicationId: st
                       <Button
                         variant="secondary"
                         size="sm"
-                        disabled={isPending && uploadingId === doc.id}
+                        disabled={uploadingId === doc.id}
                         onClick={() => pickFile(doc.id, doc.itemId)}
                       >
-                        {isPending && uploadingId === doc.id ? "Uploading…" : "Upload"}
+                        {uploadingId === doc.id ? "Uploading…" : "Upload"}
                       </Button>
                     </>
                   )}

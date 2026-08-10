@@ -84,7 +84,7 @@ export function ConflictOfInterestForm({
           <Button variant="secondary" size="sm" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button size="sm" onClick={submit} disabled={isPending || !reason.trim()}>
+          <Button size="sm" onClick={submit} disabled={!reason.trim()} loading={isPending}>
             Record
           </Button>
         </div>

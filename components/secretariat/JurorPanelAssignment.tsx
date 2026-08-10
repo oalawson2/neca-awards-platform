@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Select } from "@/components/ui/Field";
+import { Spinner } from "@/components/ui/Button";
 import { assignJurorToPanel, removeJurorFromPanel } from "@/lib/actions/panels";
 import type { PlatformUser } from "@/types/domain";
 
@@ -34,7 +35,7 @@ export function JurorPanelAssignment({
               onClick={() => startTransition(async () => { await removeJurorFromPanel(id); })}
               className="text-[#5E3B9A]/60 hover:text-[#5E3B9A]"
             >
-              ✕
+              {isPending ? <Spinner className="w-2.5 h-2.5" /> : "✕"}
             </button>
           </span>
         ))}
@@ -57,8 +58,9 @@ export function JurorPanelAssignment({
                 if (!result.success) setError(result.error ?? "Could not assign juror.");
               })
             }
-            className="text-xs font-semibold text-info"
+            className="text-xs font-semibold text-info inline-flex items-center gap-1.5"
           >
+            {isPending && <Spinner className="w-3 h-3" />}
             + Add
           </button>
         </div>

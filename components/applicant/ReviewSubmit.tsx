@@ -95,7 +95,7 @@ export function ReviewSubmit({
         <Button variant="secondary" onClick={() => router.push("/applicant/documents")}>
           ← Back to documents
         </Button>
-        <Button onClick={submit} disabled={isPending}>
+        <Button onClick={submit} loading={isPending}>
           Submit application →
         </Button>
       </div>

@@ -5,6 +5,7 @@ import { getApplication } from "@/lib/data/applications";
 import { getAnswers, getEffectiveItemsForApplication } from "@/lib/data/answers";
 import { getDocumentVerificationSummary } from "@/lib/data/stage2a";
 import { getPanelSubmissionCount, getVerifiedScoreIfComplete } from "@/lib/data/scorecards";
+import { itemScorePercent } from "@/lib/scoring/stage1";
 import {
   GEOGRAPHICAL_COVERAGE_LABELS,
   ORG_SIZE_LABELS,
@@ -94,7 +95,7 @@ export default async function ApplicationDetailPage({
           </div>
         )}
 
-        {tab === "responses" && <ResponsesTab applicationId={id} />}
+        {tab === "responses" && <ResponsesTab applicationId={id} sectorId={org.sectorId} employeeCount={org.employeeCount} />}
         {tab === "documents" && <DocumentsTab applicationId={id} />}
         {tab === "scores" && <ScoreBreakdownTab applicationId={id} />}
       </div>
@@ -111,7 +112,15 @@ function ProfileRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-async function ResponsesTab({ applicationId }: { applicationId: string }) {
+async function ResponsesTab({
+  applicationId,
+  sectorId,
+  employeeCount,
+}: {
+  applicationId: string;
+  sectorId: string;
+  employeeCount: number | null;
+}) {
   const [answers, items] = await Promise.all([getAnswers(applicationId), getEffectiveItemsForApplication(applicationId)]);
   const answerByItem = Object.fromEntries(answers.map((a) => [a.itemId, a]));
 
@@ -119,18 +128,34 @@ async function ResponsesTab({ applicationId }: { applicationId: string }) {
     <div className="border border-border rounded-2xl overflow-hidden">
       {items.map((item) => {
         const answer = answerByItem[item.id];
+        // Same per-item Stage 1 scoring the pillar rollup uses — null
+        // means this item doesn't contribute at all (N/A, narrative, or
+        // an un-benchmarked NUM item), shown as "—" rather than 0%, which
+        // would misleadingly read as "scored zero."
+        const scorePercent = itemScorePercent(item, answer, [], sectorId, employeeCount);
         return (
-          <div key={item.id} className="flex justify-between items-start gap-3 px-5 py-3.5 border-b last:border-b-0 border-border text-sm">
-            <div>
+          <div
+            key={item.id}
+            className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 sm:gap-3 px-5 py-3.5 border-b last:border-b-0 border-border text-sm"
+          >
+            <div className="min-w-0 sm:pr-3">
               <span className="text-text-muted font-mono text-xs mr-2">{item.id}</span>
               {item.prompt}
             </div>
-            <div className="text-right flex-shrink-0">
-              {answer?.isNA ? (
-                <span className="text-warning font-semibold">N/A — {answer.naJustification}</span>
-              ) : (
-                <strong>{formatAnswer(answer?.value ?? null)}</strong>
-              )}
+            <div className="flex items-center justify-between sm:justify-end gap-3 sm:flex-shrink-0">
+              <span
+                className={`text-xs font-bold font-mono flex-shrink-0 ${scorePercent === null ? "text-[#AEB1BC]" : scorePercent >= 60 ? "text-success" : "text-warning"}`}
+                title="This item's Stage 1 auto-score"
+              >
+                {scorePercent === null ? "—" : `${scorePercent}%`}
+              </span>
+              <span className="sm:text-right">
+                {answer?.isNA ? (
+                  <span className="text-warning font-semibold">N/A — {answer.naJustification}</span>
+                ) : (
+                  <strong>{formatAnswer(answer?.value ?? null)}</strong>
+                )}
+              </span>
             </div>
           </div>
         );

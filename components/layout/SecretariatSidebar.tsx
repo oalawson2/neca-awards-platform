@@ -34,7 +34,7 @@ function NavLinks({ items, onNavigate, pathname }: { items: typeof NAV_ITEMS; on
           onClick={onNavigate}
           className={cn(
             "text-[13px] px-4 py-[11px] rounded-full transition-colors",
-            isActive(pathname, item.href) ? "text-white font-bold bg-white/[0.14]" : "text-[#B7B9D6] hover:text-white"
+            isActive(pathname, item.href) ? "text-white font-bold bg-white/[0.14]" : "text-white/80 hover:text-white"
           )}
         >
           {item.label}
@@ -59,7 +59,7 @@ export function SecretariatSidebar({ userName, isSuperAdmin }: { userName: strin
         </div>
         <NavLinks items={items} pathname={pathname} />
         <form action={signOut} className="mt-auto pt-4">
-          <button className="text-[13px] text-[#B7B9D6] hover:text-white px-4 py-[11px] w-full text-left">Sign out</button>
+          <button className="text-[13px] text-white/80 hover:text-white px-4 py-[11px] w-full text-left">Sign out</button>
         </form>
       </aside>
 
@@ -94,7 +94,7 @@ export function SecretariatSidebar({ userName, isSuperAdmin }: { userName: strin
             </div>
             <NavLinks items={items} pathname={pathname} onNavigate={() => setDrawerOpen(false)} />
             <form action={signOut} className="mt-auto pt-4">
-              <button className="text-[13px] text-[#B7B9D6] hover:text-white px-4 py-[11px] w-full text-left">Sign out</button>
+              <button className="text-[13px] text-white/80 hover:text-white px-4 py-[11px] w-full text-left">Sign out</button>
             </form>
           </div>
           <div className="flex-1 bg-black/30" />

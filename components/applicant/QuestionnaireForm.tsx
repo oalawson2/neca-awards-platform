@@ -136,7 +136,7 @@ export function QuestionnaireForm({
           <Button variant="secondary" onClick={() => goToPillar(pillarIndex - 1)} disabled={pillarIndex === 0 || isPending}>
             ← Previous
           </Button>
-          <Button onClick={continueOrFinish} disabled={isPending}>
+          <Button onClick={continueOrFinish} loading={isPending}>
             {isPending ? "Saving…" : pillarIndex < SCORED_PILLARS.length - 1 ? "Save & continue →" : "Continue to documents →"}
           </Button>
         </div>

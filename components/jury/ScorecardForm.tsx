@@ -173,7 +173,7 @@ export function ScorecardForm({
           <Button variant="secondary" onClick={previous} disabled={sectionIndex === 0 || isPending}>
             ← Previous
           </Button>
-          <Button onClick={saveAndContinue} disabled={isPending}>
+          <Button onClick={saveAndContinue} loading={isPending}>
             {sectionIndex === SCORED_PILLARS.length - 1 ? "Submit scorecard →" : "Save & continue →"}
           </Button>
         </div>

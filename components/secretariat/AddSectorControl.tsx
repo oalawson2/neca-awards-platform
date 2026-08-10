@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { addSector } from "@/lib/actions/sectors";
 import { Input, Select } from "@/components/ui/Field";
+import { Spinner } from "@/components/ui/Button";
 import type { SectorCategoryOption } from "@/lib/data/sectors";
 
 export function AddSectorControl({ categories }: { categories: SectorCategoryOption[] }) {
@@ -38,7 +39,7 @@ export function AddSectorControl({ categories }: { categories: SectorCategoryOpt
           className="text-xs py-1.5 px-2 w-32"
         />
         <button
-          className="text-xs text-success font-semibold"
+          className="text-xs text-success font-semibold inline-flex items-center gap-1.5"
           disabled={isPending || !name.trim() || !categoryId}
           onClick={() =>
             startTransition(async () => {
@@ -53,6 +54,7 @@ export function AddSectorControl({ categories }: { categories: SectorCategoryOpt
             })
           }
         >
+          {isPending && <Spinner className="w-3 h-3" />}
           Save
         </button>
       </div>

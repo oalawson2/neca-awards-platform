@@ -16,8 +16,10 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "next": "16.2.12",
+    "pdf-lib": "^1.17.1",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "resend": "^6.18.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   },

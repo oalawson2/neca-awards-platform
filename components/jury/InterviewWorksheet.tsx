@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Button } from "@/components/ui/Button";
+import { Button, Spinner } from "@/components/ui/Button";
 import { Textarea, Input, Select } from "@/components/ui/Field";
 import { formatDate } from "@/lib/utils";
 import { saveConsistencyNote, addLiveEvidenceRequest, markEvidenceReceived } from "@/lib/actions/interviews";
@@ -108,7 +108,7 @@ export function InterviewWorksheet({
             onChange={(e) => setNewRequestNote(e.target.value)}
             className="flex-1"
           />
-          <Button variant="secondary" size="sm" onClick={submitRequest} disabled={isPending || !newRequestItemId}>
+          <Button variant="secondary" size="sm" onClick={submitRequest} disabled={!newRequestItemId} loading={isPending}>
             + Request
           </Button>
         </div>
@@ -122,7 +122,12 @@ export function InterviewWorksheet({
               {r.receivedAt ? (
                 <span className="text-xs font-semibold text-success">✓ Received</span>
               ) : (
-                <button onClick={() => markReceived(r.id)} className="text-xs text-info font-semibold">
+                <button
+                  onClick={() => markReceived(r.id)}
+                  disabled={isPending}
+                  className="text-xs text-info font-semibold inline-flex items-center gap-1.5 disabled:text-[#AEB1BC]"
+                >
+                  {isPending && <Spinner className="w-3 h-3" />}
                   Mark received
                 </button>
               )}

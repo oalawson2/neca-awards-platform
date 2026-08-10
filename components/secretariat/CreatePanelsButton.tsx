@@ -12,7 +12,7 @@ export function CreatePanelsButton() {
   return (
     <Button
       size="sm"
-      disabled={isPending}
+      loading={isPending}
       onClick={() =>
         startTransition(async () => {
           await ensurePanelsExist();

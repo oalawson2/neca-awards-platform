@@ -27,7 +27,7 @@ export default function Home() {
         Apply Now →
       </LinkButton>
 
-      <a href="/login" className="mt-8 text-[13px] text-[#8B8FC0] hover:text-white transition-colors">
+      <a href="/login" className="mt-8 text-[13px] text-white/90 hover:text-white transition-colors">
         Already applying? Sign in
       </a>
     </main>

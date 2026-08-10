@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
+import { getResultsReleaseStatus } from "@/lib/data/resultsRelease";
+import { ResultsReleaseControl } from "@/components/secretariat/ResultsReleaseControl";
 
 /**
  * The old single advancement-threshold setting is gone — Section A
@@ -12,6 +14,8 @@ import { getCurrentUser } from "@/lib/auth/session";
 export default async function SettingsPage() {
   const user = await getCurrentUser();
   if (user?.role !== "secretariat_super_admin") redirect("/secretariat");
+
+  const { releasedAt } = await getResultsReleaseStatus();
 
   const links = [
     { href: "/secretariat/shortlisting", label: "Shortlisting", desc: "Per-sector shortlist count/percentage cutoffs" },
@@ -34,6 +38,9 @@ export default async function SettingsPage() {
             </a>
           ))}
         </div>
+
+        <div className="text-xs font-bold text-[#AEB1BC] mt-8 mb-2.5">RESULTS</div>
+        <ResultsReleaseControl releasedAt={releasedAt} />
       </div>
     </div>
   );

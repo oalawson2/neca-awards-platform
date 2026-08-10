@@ -24,6 +24,11 @@ import type {
 
 const STEP_LABELS = ["Organisation details", "Structure & coverage", "Contact & history", "Eligibility declarations"];
 
+// Matches the real seeded sectors row this triggers the follow-up field
+// for — matched by name rather than a hardcoded id, so it keeps working
+// if the sector taxonomy is ever re-seeded with new ids.
+const OTHER_SECTOR_NAME = "Other (Please Specify)";
+
 export function ProfileWizard({
   applicationId: initialApplicationId,
   initialOrg,
@@ -47,6 +52,7 @@ export function ProfileWizard({
     rcNumber: initialOrg.rcNumber,
     yearEstablishedBand: initialOrg.yearEstablishedBand,
     sectorId: initialOrg.sectorId,
+    sectorOtherDetail: initialOrg.sectorOtherDetail ?? "",
     sizeTier: initialOrg.sizeTier,
     employeeCount: initialOrg.employeeCount,
     geographicalCoverage: initialOrg.geographicalCoverage,
@@ -68,6 +74,10 @@ export function ProfileWizard({
     setError(null);
     if (step === 0 && (!fields.name.trim() || !fields.rcNumber.trim())) {
       setError("Organisation name and RC number are required.");
+      return;
+    }
+    if (step === 0 && sectors.find((s) => s.id === fields.sectorId)?.name === OTHER_SECTOR_NAME && !fields.sectorOtherDetail.trim()) {
+      setError("Please specify your sector.");
       return;
     }
     if (step === 2 && (!fields.primaryContactName.trim() || !fields.primaryContactEmail.trim())) {
@@ -172,7 +182,14 @@ export function ProfileWizard({
             </div>
             <div>
               <Label>Sector</Label>
-              <Select value={fields.sectorId} onChange={(e) => update("sectorId", e.target.value)}>
+              <Select
+                value={fields.sectorId}
+                onChange={(e) => {
+                  const newSectorId = e.target.value;
+                  const stillOther = sectors.find((s) => s.id === newSectorId)?.name === OTHER_SECTOR_NAME;
+                  setFields((f) => ({ ...f, sectorId: newSectorId, sectorOtherDetail: stillOther ? f.sectorOtherDetail : "" }));
+                }}
+              >
                 <option value="">Select a sector</option>
                 {Object.entries(
                   sectors.reduce<Record<string, Sector[]>>((groups, s) => {
@@ -190,6 +207,12 @@ export function ProfileWizard({
                 ))}
               </Select>
             </div>
+            {sectors.find((s) => s.id === fields.sectorId)?.name === OTHER_SECTOR_NAME && (
+              <div className="sm:col-span-2">
+                <Label>Please specify your sector</Label>
+                <Input value={fields.sectorOtherDetail} onChange={(e) => update("sectorOtherDetail", e.target.value)} placeholder="e.g. Renewable energy consulting" />
+              </div>
+            )}
             <div>
               <Label>Organisation size</Label>
               <Select value={fields.sizeTier} onChange={(e) => update("sizeTier", e.target.value as OrgSizeTier)}>
@@ -359,7 +382,7 @@ export function ProfileWizard({
             )}
           </div>
           <div className="flex gap-3">
-            <Button variant="secondary" onClick={saveDraft} disabled={isPending}>
+            <Button variant="secondary" onClick={saveDraft} loading={isPending}>
               Save draft
             </Button>
             {step < 3 ? (
@@ -367,7 +390,7 @@ export function ProfileWizard({
                 Continue
               </Button>
             ) : (
-              <Button onClick={confirmAndContinue} disabled={isPending}>
+              <Button onClick={confirmAndContinue} loading={isPending}>
                 Confirm & continue →
               </Button>
             )}

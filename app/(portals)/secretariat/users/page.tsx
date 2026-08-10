@@ -3,6 +3,7 @@ import { getPanelNamesByJuror } from "@/lib/data/panels";
 import { resendInviteFormAction } from "@/lib/actions/users";
 import { Badge } from "@/components/ui/Badge";
 import { InviteUserModal } from "@/components/secretariat/InviteUserModal";
+import { ResendInviteButton } from "@/components/secretariat/ResendInviteButton";
 
 export default async function UsersPage() {
   const [users, panelNames] = await Promise.all([getStaffAndJurors(), getPanelNamesByJuror()]);
@@ -46,7 +47,7 @@ export default async function UsersPage() {
               <div>
                 {u.status === "invited" ? (
                   <form action={resendInviteFormAction.bind(null, u.id)}>
-                    <button className="text-info text-xs">Resend</button>
+                    <ResendInviteButton />
                   </form>
                 ) : (
                   <span className="text-xs text-[#AEB1BC]" title="Not implemented in this mock-data phase">

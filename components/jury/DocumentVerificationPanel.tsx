@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
+import { Spinner } from "@/components/ui/Button";
 import { verifyDocumentCredible, flagDocument } from "@/lib/actions/stage2a";
 import { requestInterview } from "@/lib/actions/interviews";
 import { RED_FLAG_LABELS } from "@/types/domain";
@@ -113,8 +114,9 @@ export function DocumentVerificationPanel({
               <button
                 onClick={handleRequestInterview}
                 disabled={isPending}
-                className="bg-gold text-white rounded-[10px] px-4 py-2 text-[13px] font-semibold"
+                className="bg-gold text-white rounded-[10px] px-4 py-2 text-[13px] font-semibold inline-flex items-center gap-2"
               >
+                {isPending && <Spinner className="w-3.5 h-3.5" />}
                 Request Interview
               </button>
             </>
@@ -176,20 +178,22 @@ export function DocumentVerificationPanel({
                 onClick={markFlagged}
                 disabled={isPending}
                 className={cn(
-                  "border-[1.5px] rounded-[10px] px-4.5 py-2.5 text-[13px] font-semibold",
+                  "border-[1.5px] rounded-[10px] px-4.5 py-2.5 text-[13px] font-semibold inline-flex items-center gap-2",
                   active.myVerification?.credible === false ? "bg-error text-white border-error" : "border-error text-error"
                 )}
               >
+                {isPending && <Spinner className="w-3.5 h-3.5" />}
                 Red-flag document
               </button>
               <button
                 onClick={markCredible}
                 disabled={isPending}
                 className={cn(
-                  "rounded-[10px] px-5 py-2.5 text-[13px] font-semibold",
+                  "rounded-[10px] px-5 py-2.5 text-[13px] font-semibold inline-flex items-center gap-2",
                   active.myVerification?.credible === true ? "bg-success text-white" : "bg-navy text-white"
                 )}
               >
+                {isPending && <Spinner className="w-3.5 h-3.5" />}
                 Verify as credible
               </button>
             </div>

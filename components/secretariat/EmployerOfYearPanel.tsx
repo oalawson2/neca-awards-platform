@@ -46,7 +46,7 @@ export function EmployerOfYearPanel({
           Once every sector&rsquo;s panel has confirmed a sectoral winner, convene the cross-sector round — all 9
           jurors independently re-score every winner from scratch.
         </p>
-        <Button size="sm" onClick={convene} disabled={isPending}>
+        <Button size="sm" onClick={convene} loading={isPending}>
           Convene Employer of the Year round
         </Button>
         {message && <div className="text-xs text-text-muted mt-2">{message}</div>}
@@ -75,7 +75,7 @@ export function EmployerOfYearPanel({
               validation.winnerApplicationId === r.applicationId && <Badge tone="winner">EMPLOYER OF THE YEAR</Badge>
             ) : (
               r.individualScores.length === 9 && (
-                <Button size="sm" onClick={() => validate(r.applicationId)} disabled={isPending}>
+                <Button size="sm" onClick={() => validate(r.applicationId)} loading={isPending}>
                   Jury Committee validate as winner
                 </Button>
               )

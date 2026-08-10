@@ -27,6 +27,9 @@ export async function setShortlistConfig(sectorId: string, sizeTier: OrgSizeTier
     return { success: false, error: "Only a Secretariat super admin can configure shortlist cutoffs." };
   }
   if (value <= 0) return { success: false, error: "Value must be greater than zero." };
+  if ((mode === "percentage" || mode === "minimum_score") && value > 100) {
+    return { success: false, error: "Percentage must be 100 or less." };
+  }
 
   const supabase = await createClient();
   const cycleYear = new Date().getFullYear();

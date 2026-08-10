@@ -88,6 +88,11 @@ export async function saveOrganizationProfile(
     name: trimmedName,
     rc_number: trimmedRc,
     employee_count: profile.employeeCount,
+    // ProfileWizard only shows/populates this field when the selected
+    // sector is "Other (Please Specify)", and clears it in its own state
+    // the moment a different sector is chosen — so whatever's here at
+    // save time is already correctly scoped, just trimmed/nulled here.
+    sector_other_detail: profile.sectorOtherDetail?.trim() || null,
     year_established_band: profile.yearEstablishedBand || null,
     geographical_coverage: profile.geographicalCoverage || null,
     ownership_structure: profile.ownershipStructure || null,

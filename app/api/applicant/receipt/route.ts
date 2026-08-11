@@ -9,6 +9,18 @@ import { getApplicationForApplicantUser } from "@/lib/data/applications";
  * mock-data phase"). Auth is the same scoping getApplicationForApplicantUser
  * already does (organizations.created_by = the signed-in user), so this
  * can only ever produce the caller's own receipt, never anyone else's.
+ *
+ * A dynamic `import("pdf-lib")` was tried here to keep it out of the
+ * build's eagerly-compiled module graph. Reverted: this route is compiled
+ * with `next build --webpack` (see package.json's build script — Turbopack
+ * can't resolve through cPanel's symlinked node_modules), and webpack
+ * bundles a plain top-level import straight into this route's single
+ * compiled file — confirmed pdf-lib's code is genuinely inlined into
+ * .next/server/app/api/applicant/receipt/route.js, ~440KB, self-contained.
+ * A dynamic import instead becomes a separate async chunk that has to be
+ * loaded at runtime, and nothing here verified that chunk file actually
+ * survives the .next/standalone copy step — not a risk worth taking for a
+ * feature already confirmed working end-to-end against the live app.
  */
 export async function GET() {
   const user = await getCurrentUser();

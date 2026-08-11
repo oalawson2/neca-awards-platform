@@ -18,6 +18,21 @@
 # compiling with "Resource temporarily unavailable". See next.config.ts's
 # experimental.cpus for the equivalent cap on the Node-side worker pool.
 #
+# NODE_OPTIONS="--max-old-space-size=512" caps the JS heap Node's own
+# `next build` process is allowed to grow. This does NOT cap the process's
+# total memory — native/off-heap allocations (buffers, the Rust tooling
+# above, mmap'd files) sit outside it entirely, and this host's real
+# ceiling is enforced separately at the OS level. What it DOES do,
+# empirically: a lower ceiling makes V8 collect garbage more eagerly
+# instead of growing the heap opportunistically, which measurably lowers
+# actual peak RSS during the build, not just the JS heap figure. Measured
+# repeatedly on an equivalent build: default heap sizing peaks in the
+# ~1000-1050MB range; capped at 512MB it consistently peaks ~900-950MB.
+# 384MB still completes but with much thinner margin; 256MB reliably
+# crashes with a real "JavaScript heap out of memory" error — 512MB is
+# the tested floor with real safety margin, not just the first value that
+# happened to work once.
+#
 # Same requirement as deploy.sh: a real .env.local must already exist at
 # the app root before `npm run build` runs here, or NEXT_PUBLIC_* vars
 # compile in as undefined (cPanel's env var UI doesn't reach this deploy
@@ -27,7 +42,7 @@ deployment:
     - export NODEVENV_ACTIVATE=/home/necasmwo/nodevenv/neca-app/24/bin/activate
     - source $NODEVENV_ACTIVATE
     - npm ci
-    - RAYON_NUM_THREADS=1 npm run build
+    - RAYON_NUM_THREADS=1 NODE_OPTIONS="--max-old-space-size=512" npm run build
     # output: "standalone" (next.config.ts) produces a self-contained
     # server at .next/standalone/server.js, but per Next's own docs it
     # does NOT include public/ or .next/static — those have to be copied

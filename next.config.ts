@@ -20,6 +20,21 @@ const nextConfig: NextConfig = {
     // 01-app/02-guides/memory-usage.md — this is the flag Next's own
     // memory-usage guide leads with for a Webpack build hitting OOM.
     webpackMemoryOptimizations: true,
+
+    // Tried and measured `webpackBuildWorker: false` here (forces the
+    // Webpack compiler to run inside the main `next build` process instead
+    // of the forked child process it uses by default — see
+    // node_modules/next/dist/build/webpack-build/index.js, where that
+    // worker is already hardcoded to numWorkers: 1, so no parallelism was
+    // left to strip out of it, only the process boundary itself). It made
+    // things markedly worse, not better: two measured runs came back at
+    // 1346MB and 1560MB peak RSS, well above every measurement with the
+    // default (worker-on) config. Best explanation: the forked worker gets
+    // fully reclaimed by the OS the instant it exits after compiling,
+    // which the main (long-lived) process never gets — running in-process
+    // just accumulates the whole build's memory in one heap with no clean
+    // point to release any of it. Left explicitly unset (default: true)
+    // rather than removed outright, so nobody re-tries this blind.
   },
 
   // `next build` normally also runs a full-program TypeScript check on top

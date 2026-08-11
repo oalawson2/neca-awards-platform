@@ -19,6 +19,45 @@ async function requireSecretariat(): Promise<InviteResult | null> {
 }
 
 /**
+ * GoTrue (Supabase Auth) deliberately doesn't return the underlying SMTP
+ * provider's error over the admin API — callers just get a generic
+ * "Error sending invite email" / unexpected_failure, regardless of
+ * whether the real cause was a bad SMTP password, a network timeout, or
+ * (as confirmed live against this project's own auth logs while
+ * diagnosing this) Resend's sandbox-mode restriction: with no verified
+ * sending domain, Resend only accepts mail addressed to the Resend
+ * account owner's own inbox and 550-rejects everyone else. That real
+ * reason only shows up in Supabase's own Auth logs (Dashboard -> Logs ->
+ * Auth, or mcp__Supabase__get_logs), never in this app's stderr — so we
+ * log everything the SDK does hand back here (code/status/message) to at
+ * least confirm it's the email-send step failing, and surface a message
+ * that names the most likely fix rather than the SDK's opaque one.
+ */
+function logInviteError(context: string, error: { message: string; code?: string; status?: number }) {
+  console.error(`[inviteUser] ${context}:`, { message: error.message, code: error.code, status: error.status });
+}
+
+/**
+ * error.message is not a reliable signal on its own — confirmed live that
+ * the SDK sometimes hands back the literal string "{}" instead of
+ * GoTrue's actual "Error sending invite email" text for the exact same
+ * failure (an empty/malformed error body the SDK couldn't parse into its
+ * usual shape). status is the reliable part: email_exists and other
+ * expected rejections come back 4xx; a bare 500 with no more specific
+ * code from this endpoint is GoTrue's generic "unexpected_failure"
+ * bucket, which in practice here is the email-send step.
+ */
+function isSendFailure(error: { message: string; code?: string; status?: number }): boolean {
+  return error.code === "unexpected_failure" || error.status === 500 || /error sending/i.test(error.message);
+}
+
+const SEND_FAILURE_MESSAGE =
+  "Invite created, but the email didn't send. Most likely cause: Resend is still in sandbox mode " +
+  "(no verified sending domain), which only allows mail to the Resend account's own inbox — check " +
+  "resend.com/domains and the \"from\" address in Supabase's Auth SMTP settings. For the exact " +
+  "underlying error, check Supabase Dashboard -> Logs -> Auth.";
+
+/**
  * Real invite flow (resolved from task #40's deferred design fork now
  * that the service-role key is available): supabase.auth.admin.inviteUserByEmail
  * creates the auth.users row immediately and sends Supabase's own invite
@@ -48,8 +87,12 @@ export async function inviteUser(input: { name: string; email: string; role: "se
   const admin = createAdminClient();
   const { data, error } = await admin.auth.admin.inviteUserByEmail(email, { data: { full_name: name } });
   if (error) {
+    logInviteError(`inviteUserByEmail failed for ${email}`, error);
     if (error.code === "email_exists" || /already registered/i.test(error.message)) {
       return { success: false, error: "A user with this email already exists." };
+    }
+    if (isSendFailure(error)) {
+      return { success: false, error: SEND_FAILURE_MESSAGE };
     }
     return { success: false, error: error.message };
   }
@@ -57,6 +100,7 @@ export async function inviteUser(input: { name: string; email: string; role: "se
 
   const { error: promoteError } = await admin.from("profiles").update({ role: input.role, full_name: name }).eq("id", data.user.id);
   if (promoteError) {
+    console.error(`[inviteUser] role promotion failed for ${email} (user ${data.user.id}):`, promoteError);
     return { success: false, error: "Invite sent, but the role couldn't be set. Contact an engineer to fix this account's role." };
   }
 
@@ -72,10 +116,19 @@ export async function resendInvite(userId: string): Promise<InviteResult> {
 
   const admin = createAdminClient();
   const { data: user, error: lookupError } = await admin.auth.admin.getUserById(userId);
-  if (lookupError || !user.user?.email) return { success: false, error: "User not found." };
+  if (lookupError || !user.user?.email) {
+    if (lookupError) console.error(`[resendInvite] getUserById failed for ${userId}:`, lookupError);
+    return { success: false, error: "User not found." };
+  }
 
   const { error } = await admin.auth.admin.inviteUserByEmail(user.user.email);
-  if (error) return { success: false, error: "Could not resend invite." };
+  if (error) {
+    logInviteError(`resend inviteUserByEmail failed for ${user.user.email}`, error);
+    if (isSendFailure(error)) {
+      return { success: false, error: SEND_FAILURE_MESSAGE };
+    }
+    return { success: false, error: error.message };
+  }
 
   const actor = await getCurrentUser();
   await logAction(actor?.fullName ?? "Secretariat", "Resent invite to", user.user.email);

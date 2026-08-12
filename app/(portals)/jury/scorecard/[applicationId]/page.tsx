@@ -43,6 +43,17 @@ export default async function JuryScorecardPage({
 
   return (
     <ScorecardForm
+      // Forces a full remount (not just a re-render) when the juror
+      // navigates to a different applicant or a different round for the
+      // same applicant. ScorecardForm's working state (cardsByPillar,
+      // sectionIndex, etc.) is seeded once from initialCards via a
+      // useState lazy initializer — that only runs on first mount, so
+      // without this key, navigating A -> B just re-renders the same
+      // component instance in place and leaves A's scores and pillar
+      // position on screen under B's name. key={applicationId+round}
+      // makes React treat each (applicant, round) pair as a distinct
+      // component instance, so it mounts fresh — and resets — every time.
+      key={`${applicationId}:${round}`}
       applicationId={applicationId}
       jurorId={user.id}
       jurorName={jurorName}

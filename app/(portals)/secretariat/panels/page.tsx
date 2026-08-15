@@ -1,5 +1,5 @@
-import { getPanelsWithDetails, getJurorConflicts, getUnassignedSectorIds } from "@/lib/data/panels";
-import { getSectors } from "@/lib/data/sectors";
+import { getPanelsWithDetails, getJurorConflicts, getUnassignedSectorCategoryIds } from "@/lib/data/panels";
+import { getSectorCategories } from "@/lib/data/sectors";
 import { getApplications } from "@/lib/data/applications";
 import { getStaffAndJurors } from "@/lib/data/users";
 import { PanelSectorAssignment } from "@/components/secretariat/PanelSectorAssignment";
@@ -9,15 +9,15 @@ import { CreatePanelsButton } from "@/components/secretariat/CreatePanelsButton"
 import { formatDate } from "@/lib/utils";
 
 export default async function PanelsPage() {
-  const [panels, sectors, unassignedSectorIds, conflicts, applications, staffAndJurors] = await Promise.all([
+  const [panels, sectorCategories, unassignedSectorCategoryIds, conflicts, applications, staffAndJurors] = await Promise.all([
     getPanelsWithDetails(),
-    getSectors(),
-    getUnassignedSectorIds(),
+    getSectorCategories(),
+    getUnassignedSectorCategoryIds(),
     getJurorConflicts(),
     getApplications(),
     getStaffAndJurors(),
   ]);
-  const unassignedSectors = sectors.filter((s) => unassignedSectorIds.includes(s.id));
+  const unassignedSectors = sectorCategories.filter((s) => unassignedSectorCategoryIds.includes(s.id));
   const jurors = staffAndJurors.filter((u) => u.role === "jury");
   const assignedJurorIds = new Set(panels.flatMap((p) => p.jurorIds));
   const unassignedJurors = jurors.filter((j) => !assignedJurorIds.has(j.id));
@@ -58,9 +58,9 @@ export default async function PanelsPage() {
                   <div className="text-xs font-bold text-[#AEB1BC] mb-2">ASSIGNED SECTORS</div>
                   <PanelSectorAssignment
                     panelId={panel.id}
-                    assignedSectorIds={panel.sectorIds}
+                    assignedSectorIds={panel.sectorCategoryIds}
                     unassignedSectors={unassignedSectors}
-                    allSectors={sectors}
+                    allSectors={sectorCategories}
                   />
                   <JurorPanelAssignment
                     panelId={panel.id}

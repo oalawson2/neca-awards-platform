@@ -22,6 +22,24 @@ export async function getDocumentsForVerification(applicationId: string, jurorId
   const documents = (await getDocuments(applicationId)).filter((d) => d.status === "uploaded");
   if (documents.length === 0) return [];
 
+  return buildVerificationRows(applicationId, jurorId, documents);
+}
+
+/**
+ * The complement of getDocumentsForVerification — required documents this
+ * applicant never uploaded. Deliberately a separate function rather than
+ * folding into getDocumentsForVerification's own return: that list also
+ * drives the "N of M reviewed" / interview-unlock gate, which only makes
+ * sense over documents a juror can actually open and judge. Missing docs
+ * need to be visible (now that submission no longer requires every
+ * document — see lib/actions/submission.ts), just not mixed into that
+ * gate.
+ */
+export async function getMissingDocuments(applicationId: string): Promise<RequiredDocument[]> {
+  return (await getDocuments(applicationId)).filter((d) => d.status !== "uploaded");
+}
+
+async function buildVerificationRows(applicationId: string, jurorId: string, documents: RequiredDocument[]): Promise<DocumentWithVerification[]> {
   const supabase = await createClient();
   const itemDbIds = documents.map((d) => ITEM_BY_CODE.get(d.itemId)!.dbId);
   const docEvidenceIds = documents.map((d) => d.id);

@@ -137,13 +137,13 @@ export async function buildNonShortlistedReportContent(applicationId: string) {
   if (!app) return { pillarSummary: [] };
   const { data: org } = await supabase
     .from("organizations")
-    .select("is_unionised, sector_id, employee_count")
+    .select("is_unionised, sector_id")
     .eq("id", app.organization_id)
     .maybeSingle();
   if (!org) return { pillarSummary: [] };
 
   const answers = await getAnswers(applicationId);
-  const { pillars } = computeStage1Score(PILLARS, org.is_unionised, answers, [], org.sector_id, org.employee_count);
+  const { pillars } = computeStage1Score(PILLARS, org.is_unionised, answers, [], org.sector_id);
 
   const sorted = [...pillars].sort((a, b) => b.scorePercent - a.scorePercent);
   const pillarName = (code: string) => SCORED_PILLARS.find((p) => p.code === code)?.name ?? code;

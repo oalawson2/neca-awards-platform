@@ -334,6 +334,8 @@ export interface RequiredDocument {
   status: DocumentStatus;
   fileName?: string;
   uploadedAt?: string;
+  /** Storage object path (application-documents bucket) — its extension reflects the real stored content-type, which can differ from fileName after compression re-encodes an upload as JPEG. */
+  storagePath?: string;
 }
 
 export type RedFlagReason = "undated" | "unsigned" | "generic_template" | "mismatched_organisation" | "expired";

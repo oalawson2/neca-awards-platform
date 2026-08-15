@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { Select } from "@/components/ui/Field";
 import { Spinner } from "@/components/ui/Button";
 import { assignSectorToPanel, unassignSectorFromPanel } from "@/lib/actions/panels";
-import type { Sector } from "@/types/domain";
+import type { SectorCategoryOption } from "@/lib/data/sectors";
 
 export function PanelSectorAssignment({
   panelId,
@@ -14,8 +14,8 @@ export function PanelSectorAssignment({
 }: {
   panelId: string;
   assignedSectorIds: string[];
-  unassignedSectors: Sector[];
-  allSectors: Sector[];
+  unassignedSectors: SectorCategoryOption[];
+  allSectors: SectorCategoryOption[];
 }) {
   const [isPending, startTransition] = useTransition();
   const [selected, setSelected] = useState(unassignedSectors[0]?.id ?? "");

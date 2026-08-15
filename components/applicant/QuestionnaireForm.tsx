@@ -16,10 +16,12 @@ export function QuestionnaireForm({
   applicationId,
   isUnionised,
   initialAnswers,
+  readOnly = false,
 }: {
   applicationId: string;
   isUnionised: boolean;
   initialAnswers: AssessmentAnswer[];
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const [pillarIndex, setPillarIndex] = useState(0);
@@ -43,6 +45,7 @@ export function QuestionnaireForm({
     }).length;
 
   function handleChange(itemId: string, value: AnswerValue, isNA: boolean, naJustification: string) {
+    if (readOnly) return; // belt-and-braces — AssessmentItemField's own inputs are already disabled
     const next: AssessmentAnswer = { applicationId, itemId, value, isNA, naJustification: isNA ? naJustification : undefined };
     setAnswersByItem((prev) => ({ ...prev, [itemId]: next }));
     setSaveErrors((e) => ({ ...e, [itemId]: "" }));
@@ -114,6 +117,12 @@ export function QuestionnaireForm({
         </h1>
         <p className="text-[13px] text-text-muted mb-6">Weight: {pillar.weightPoints}% of overall score.</p>
 
+        {readOnly && (
+          <div className="text-[13px] text-navy bg-[#F1F1FB] border border-border rounded-2xl px-4 py-3 mb-6">
+            Your application has been submitted and is locked for review — responses below are read-only.
+          </div>
+        )}
+
         <div className="flex flex-col gap-4">
           {items.map((item) => {
             const answer = answersByItem[item.id];
@@ -125,6 +134,7 @@ export function QuestionnaireForm({
                   isNA={answer?.isNA ?? false}
                   naJustification={answer?.naJustification ?? ""}
                   onChange={(value, isNA, naJustification) => handleChange(item.id, value, isNA, naJustification)}
+                  readOnly={readOnly}
                 />
                 {saveErrors[item.id] && <div className="text-xs text-error mt-1.5">{saveErrors[item.id]}</div>}
               </div>
@@ -137,7 +147,15 @@ export function QuestionnaireForm({
             ← Previous
           </Button>
           <Button onClick={continueOrFinish} loading={isPending}>
-            {isPending ? "Saving…" : pillarIndex < SCORED_PILLARS.length - 1 ? "Save & continue →" : "Continue to documents →"}
+            {readOnly
+              ? pillarIndex < SCORED_PILLARS.length - 1
+                ? "Next →"
+                : "Continue to documents →"
+              : isPending
+                ? "Saving…"
+                : pillarIndex < SCORED_PILLARS.length - 1
+                  ? "Save & continue →"
+                  : "Continue to documents →"}
           </Button>
         </div>
       </div>

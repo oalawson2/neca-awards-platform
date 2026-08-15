@@ -3,12 +3,18 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { getApplicationForApplicantUser } from "@/lib/data/applications";
 import { LinkButton } from "@/components/ui/Button";
 
-export default async function ApplicantSubmittedPage() {
+export default async function ApplicantSubmittedPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ docsFlagged?: string }>;
+}) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
   const application = await getApplicationForApplicantUser(user.id);
   if (!application) redirect("/applicant/profile");
+
+  const { docsFlagged } = await searchParams;
 
   return (
     <div className="px-6 py-14 sm:py-17 flex flex-col items-center text-center">
@@ -22,6 +28,13 @@ export default async function ApplicantSubmittedPage() {
       <div className="mt-6 bg-bg rounded-full px-7 py-3.5 text-sm">
         Reference No. <strong className="text-navy">{application.referenceNo}</strong>
       </div>
+
+      {docsFlagged === "1" && (
+        <div className="mt-6 max-w-md text-sm text-warning bg-[#FDF6E9] border border-[#F0DFA8] rounded-2xl px-5 py-4">
+          One or more required documents weren&rsquo;t uploaded — that&rsquo;s fine, your application went through.
+          The Secretariat will follow up on the missing documents separately during their review.
+        </div>
+      )}
 
       <div className="mt-11 w-full max-w-3xl grid sm:grid-cols-3 gap-4 text-left">
         <StepCard n="1" title="Secretariat review" desc="Completeness check, ~5 business days" />

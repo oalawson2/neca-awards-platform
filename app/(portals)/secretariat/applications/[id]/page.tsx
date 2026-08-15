@@ -14,6 +14,7 @@ import {
 } from "@/types/domain";
 import { StatusBadge, Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { DocumentsPanel } from "@/components/secretariat/DocumentsPanel";
 import type { AnswerValue } from "@/types/domain";
 
 const TABS = [
@@ -95,7 +96,7 @@ export default async function ApplicationDetailPage({
           </div>
         )}
 
-        {tab === "responses" && <ResponsesTab applicationId={id} sectorId={org.sectorId} employeeCount={org.employeeCount} />}
+        {tab === "responses" && <ResponsesTab applicationId={id} sectorId={org.sectorId} />}
         {tab === "documents" && <DocumentsTab applicationId={id} />}
         {tab === "scores" && <ScoreBreakdownTab applicationId={id} />}
       </div>
@@ -115,11 +116,9 @@ function ProfileRow({ label, value }: { label: string; value: string }) {
 async function ResponsesTab({
   applicationId,
   sectorId,
-  employeeCount,
 }: {
   applicationId: string;
   sectorId: string;
-  employeeCount: number | null;
 }) {
   const [answers, items] = await Promise.all([getAnswers(applicationId), getEffectiveItemsForApplication(applicationId)]);
   const answerByItem = Object.fromEntries(answers.map((a) => [a.itemId, a]));
@@ -132,7 +131,7 @@ async function ResponsesTab({
         // means this item doesn't contribute at all (N/A, narrative, or
         // an un-benchmarked NUM item), shown as "—" rather than 0%, which
         // would misleadingly read as "scored zero."
-        const scorePercent = itemScorePercent(item, answer, [], sectorId, employeeCount);
+        const scorePercent = itemScorePercent(item, answer, [], sectorId);
         return (
           <div
             key={item.id}
@@ -166,27 +165,7 @@ async function ResponsesTab({
 
 async function DocumentsTab({ applicationId }: { applicationId: string }) {
   const documents = await getDocumentVerificationSummary(applicationId);
-  return (
-    <div className="border border-border rounded-2xl overflow-hidden">
-      {documents.map((doc) => (
-        <div key={doc.id} className="flex justify-between items-center px-5 py-3.5 border-b last:border-b-0 border-border text-sm">
-          <div>
-            <div className="font-semibold">{doc.name}</div>
-            {doc.status === "uploaded" && (
-              <div className="text-xs text-text-muted mt-0.5">
-                {doc.credibleCount > 0 && <span className="text-success">✓ Verified credible by {doc.credibleCount}</span>}
-                {doc.credibleCount > 0 && doc.redFlagCount > 0 && " · "}
-                {doc.redFlagCount > 0 && <span className="text-error">⚠ Red-flagged by {doc.redFlagCount}</span>}
-                {doc.credibleCount === 0 && doc.redFlagCount === 0 && "Not yet reviewed"}
-              </div>
-            )}
-          </div>
-          {doc.status === "uploaded" ? <Badge tone="success">UPLOADED</Badge> : <Badge tone="error">MISSING</Badge>}
-        </div>
-      ))}
-      {documents.length === 0 && <div className="px-5 py-8 text-sm text-text-muted text-center">No documents required based on this applicant&rsquo;s answers.</div>}
-    </div>
-  );
+  return <DocumentsPanel documents={documents} />;
 }
 
 async function ScoreBreakdownTab({ applicationId }: { applicationId: string }) {

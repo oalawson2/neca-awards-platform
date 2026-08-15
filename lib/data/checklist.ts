@@ -20,10 +20,10 @@ export async function getDocuments(applicationId: string): Promise<RequiredDocum
   const supabase = await createClient();
   const [{ data: responses }, { data: uploads }] = await Promise.all([
     supabase.from("application_responses").select("item_id, response_value, na_selected").eq("application_id", applicationId),
-    supabase.from("document_evidence").select("id, item_id, file_name, uploaded_at").eq("application_id", applicationId),
+    supabase.from("document_evidence").select("id, item_id, file_name, file_path, uploaded_at").eq("application_id", applicationId),
   ]);
 
-  const uploadByItemCode = new Map<string, { id: string; file_name: string; uploaded_at: string }>();
+  const uploadByItemCode = new Map<string, { id: string; file_name: string; file_path: string; uploaded_at: string }>();
   for (const u of uploads ?? []) {
     const item = ITEM_BY_DB_ID.get(u.item_id);
     if (item) uploadByItemCode.set(item.id, u);
@@ -60,6 +60,7 @@ export async function getDocuments(applicationId: string): Promise<RequiredDocum
         status: upload ? "uploaded" : "pending",
         fileName: upload?.file_name,
         uploadedAt: upload?.uploaded_at,
+        storagePath: upload?.file_path,
       };
       return doc;
     })

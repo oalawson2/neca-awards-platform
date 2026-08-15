@@ -42,12 +42,12 @@ export async function ensurePanelsExist(): Promise<PanelActionResult> {
   return { success: true };
 }
 
-export async function assignSectorToPanel(panelId: string, sectorId: string): Promise<PanelActionResult> {
+export async function assignSectorToPanel(panelId: string, sectorCategoryId: string): Promise<PanelActionResult> {
   const denied = await requireSecretariat();
   if (denied) return denied;
 
   const supabase = await createClient();
-  const { error } = await supabase.from("panel_sector_clusters").insert({ panel_id: panelId, sector_id: sectorId });
+  const { error } = await supabase.from("panel_sector_clusters").insert({ panel_id: panelId, sector_category_id: sectorCategoryId });
   if (error) {
     if (error.code === "23505") return { success: false, error: "This sector is already assigned to a panel." };
     return { success: false, error: "Could not assign sector." };
@@ -58,12 +58,12 @@ export async function assignSectorToPanel(panelId: string, sectorId: string): Pr
   return { success: true };
 }
 
-export async function unassignSectorFromPanel(panelId: string, sectorId: string): Promise<PanelActionResult> {
+export async function unassignSectorFromPanel(panelId: string, sectorCategoryId: string): Promise<PanelActionResult> {
   const denied = await requireSecretariat();
   if (denied) return denied;
 
   const supabase = await createClient();
-  await supabase.from("panel_sector_clusters").delete().eq("panel_id", panelId).eq("sector_id", sectorId);
+  await supabase.from("panel_sector_clusters").delete().eq("panel_id", panelId).eq("sector_category_id", sectorCategoryId);
 
   await logAction("Secretariat", "Removed sector from panel", panelId);
   revalidatePath("/secretariat/panels");

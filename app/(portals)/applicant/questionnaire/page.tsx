@@ -19,6 +19,7 @@ export default async function ApplicantQuestionnairePage() {
       applicationId={application.id}
       isUnionised={application.organization.isUnionised}
       initialAnswers={answers}
+      readOnly={application.status !== "draft"}
     />
   );
 }

@@ -2,12 +2,19 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { uploadDocument } from "@/lib/actions/documents";
 import type { ChecklistGroup } from "@/lib/data/checklist";
 
-export function DocumentChecklist({ applicationId, groups }: { applicationId: string; groups: ChecklistGroup[] }) {
+export function DocumentChecklist({
+  applicationId,
+  groups,
+  readOnly = false,
+}: {
+  applicationId: string;
+  groups: ChecklistGroup[];
+  readOnly?: boolean;
+}) {
   const router = useRouter();
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   // Set the instant a given upload's response comes back successful — the
@@ -23,9 +30,7 @@ export function DocumentChecklist({ applicationId, groups }: { applicationId: st
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const allDocs = groups.flatMap((g) => g.documents);
-  const mandatory = allDocs.filter((d) => d.track === "mandatory");
-  const mandatoryUploaded = mandatory.filter((d) => d.status === "uploaded" || locallyUploaded[d.id]).length;
-  const allMandatoryUploaded = mandatory.every((d) => d.status === "uploaded" || locallyUploaded[d.id]);
+  const uploadedCount = allDocs.filter((d) => d.status === "uploaded" || locallyUploaded[d.id]).length;
 
   function pickFile(documentId: string, itemId: string) {
     setErrors((e) => ({ ...e, [documentId]: "" }));
@@ -54,12 +59,19 @@ export function DocumentChecklist({ applicationId, groups }: { applicationId: st
     <div className="max-w-3xl mx-auto px-6 sm:px-8 py-8 sm:py-10">
       <h1 className="font-heading font-extrabold text-xl sm:text-[22px] text-navy mb-1.5">Required documents</h1>
       <p className="text-[13px] text-text-muted mb-2">
-        Generated from your answers to Sections B–I. Mandatory items must be uploaded before you can submit; Advanced
-        items can be left pending.
+        Generated from your answers to Sections B–I. Uploading everything here strengthens your application, but you
+        can still submit with items missing — the Secretariat will follow up separately on anything outstanding.
       </p>
       <p className="text-[13px] font-semibold mb-6">
-        {mandatoryUploaded} of {mandatory.length} mandatory documents uploaded
+        {uploadedCount} of {allDocs.length} documents uploaded
       </p>
+
+      {readOnly && (
+        <div className="text-[13px] text-navy bg-[#F1F1FB] border border-border rounded-2xl px-4 py-3 mb-6">
+          Your application has been submitted, so new uploads are closed here. If the Secretariat needs anything
+          further from you, they&rsquo;ll be in touch directly.
+        </div>
+      )}
 
       {allDocs.length === 0 && (
         <div className="text-sm text-text-muted border border-border rounded-2xl p-6">
@@ -79,11 +91,11 @@ export function DocumentChecklist({ applicationId, groups }: { applicationId: st
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-sm">{doc.name}</span>
-                      <Badge tone={doc.track === "mandatory" ? "error" : "neutral"}>{doc.track.toUpperCase()}</Badge>
                     </div>
                     <div className="text-xs text-text-muted mt-0.5">{doc.description}</div>
                     <div className="text-xs text-[#AEB1BC] mt-0.5">
-                      Accepted: {doc.acceptedFileTypes.join(", ").toUpperCase()} · Max {doc.maxSizeMB}MB
+                      Accepted: {doc.acceptedFileTypes.join(", ").toUpperCase()} · Max {doc.maxSizeMB}MB (photos and
+                      scans are compressed automatically)
                     </div>
                     {(doc.fileName || locallyUploaded[doc.id]) && (
                       <div className="text-xs text-success mt-0.5">{doc.fileName ?? locallyUploaded[doc.id]}</div>
@@ -92,6 +104,8 @@ export function DocumentChecklist({ applicationId, groups }: { applicationId: st
                   </div>
                   {doc.status === "uploaded" || locallyUploaded[doc.id] ? (
                     <span className="text-xs font-semibold text-success flex-shrink-0">✓ Uploaded</span>
+                  ) : readOnly ? (
+                    <span className="text-xs text-text-muted flex-shrink-0">Not uploaded</span>
                   ) : (
                     <>
                       <input
@@ -123,7 +137,7 @@ export function DocumentChecklist({ applicationId, groups }: { applicationId: st
         <Button variant="secondary" onClick={() => router.push("/applicant/questionnaire")}>
           ← Back to questionnaire
         </Button>
-        <Button onClick={() => router.push("/applicant/review")} disabled={!allMandatoryUploaded}>
+        <Button onClick={() => router.push("/applicant/review")}>
           Continue to review →
         </Button>
       </div>

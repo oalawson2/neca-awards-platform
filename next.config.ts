@@ -9,6 +9,16 @@ const nextConfig: NextConfig = {
   output: "standalone",
 
   experimental: {
+    // Server Actions default to a 1MB request body cap. lib/actions/
+    // documents.ts's uploadDocument accepts raw uploads (pre-compression)
+    // up to 8MB — an unedited phone photo comfortably exceeds 1MB — so
+    // without this the upload would 413 before ever reaching the
+    // compression code that's meant to handle exactly that case. Left
+    // with headroom above the 8MB check for multipart overhead.
+    serverActions: {
+      bodySizeLimit: "10mb",
+    },
+
     // Defaults to (CPU count - 1) worker processes for the "Collecting
     // page data" build step. The shared hosting box this deploys to can't
     // fork that many workers — it fails with "ThreadPoolBuildError...

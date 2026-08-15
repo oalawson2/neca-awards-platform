@@ -62,8 +62,8 @@ export async function addSector(name: string, categoryId: string): Promise<Secto
 
 /**
  * Real schema has no delete path for sectors that are already in use
- * elsewhere (organizations.sector_id, panel_sector_clusters.sector_id
- * both FK to it) — deactivating (is_active=false) is the real operation,
+ * elsewhere (organizations.sector_id FKs to it) — deactivating
+ * (is_active=false) is the real operation,
  * matching the schema reference doc's own "add/edit/deactivate" framing.
  * A deactivated sector drops out of getSectors()'s default list (Section
  * A's dropdown) but existing organizations keep their reference to it.

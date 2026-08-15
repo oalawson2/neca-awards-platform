@@ -3,7 +3,7 @@ import type { JurorConflict, Panel } from "@/types/domain";
 
 export interface PanelWithDetails extends Panel {
   jurorNames: string[];
-  sectorIds: string[];
+  sectorCategoryIds: string[];
   shortlistedCount: number;
 }
 
@@ -25,11 +25,17 @@ export async function getPanelsWithDetails(): Promise<PanelWithDetails[]> {
   if (!panels || panels.length === 0) return [];
 
   const panelIds = panels.map((p) => p.id);
-  const [{ data: memberships }, { data: clusters }, { data: applications }] = await Promise.all([
+  const [{ data: memberships }, { data: clusters }, { data: applications }, { data: sectors }] = await Promise.all([
     supabase.from("panel_memberships").select("panel_id, juror_id, profiles(full_name)").in("panel_id", panelIds),
-    supabase.from("panel_sector_clusters").select("panel_id, sector_id").in("panel_id", panelIds),
+    supabase.from("panel_sector_clusters").select("panel_id, sector_category_id").in("panel_id", panelIds),
     supabase.from("applications").select("status, organizations(sector_id)"),
+    supabase.from("sectors").select("id, category_id"),
   ]);
+
+  // organizations only store the sub-sector (sectors.id); panel clusters are
+  // assigned at the top-level category (sector_categories.id) — this maps
+  // one to the other so shortlisted counts can compare like with like.
+  const categoryIdBySectorId = new Map((sectors ?? []).map((s) => [s.id, s.category_id]));
 
   return panels.map((panel) => {
     const panelMemberships = (memberships ?? []).filter((m) => m.panel_id === panel.id);
@@ -38,13 +44,15 @@ export async function getPanelsWithDetails(): Promise<PanelWithDetails[]> {
       const profile = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
       return profile?.full_name ?? m.juror_id;
     });
-    const sectorIds = (clusters ?? []).filter((c) => c.panel_id === panel.id).map((c) => c.sector_id);
+    const sectorCategoryIds = (clusters ?? []).filter((c) => c.panel_id === panel.id).map((c) => c.sector_category_id);
     const shortlistedCount = (applications ?? []).filter((a) => {
       if (!IN_OR_PAST_STAGE2.includes(a.status)) return false;
       const org = Array.isArray(a.organizations) ? a.organizations[0] : a.organizations;
-      return org && sectorIds.includes(org.sector_id);
+      if (!org) return false;
+      const categoryId = categoryIdBySectorId.get(org.sector_id);
+      return categoryId && sectorCategoryIds.includes(categoryId);
     }).length;
-    return { id: panel.id, name: `Panel ${panel.panel_number}`, jurorIds, jurorNames, sectorIds, shortlistedCount };
+    return { id: panel.id, name: `Panel ${panel.panel_number}`, jurorIds, jurorNames, sectorCategoryIds, shortlistedCount };
   });
 }
 
@@ -76,13 +84,13 @@ export async function getPanelNamesByJuror(): Promise<Record<string, string>> {
   return result;
 }
 
-/** Which sectors have no panel assigned yet — surfaced so the Secretariat notices gaps before Stage 2 opens. */
-export async function getUnassignedSectorIds(): Promise<string[]> {
+/** Which top-level sector categories have no panel assigned yet — surfaced so the Secretariat notices gaps before Stage 2 opens. */
+export async function getUnassignedSectorCategoryIds(): Promise<string[]> {
   const supabase = await createClient();
-  const [{ data: sectors }, { data: clusters }] = await Promise.all([
-    supabase.from("sectors").select("id").eq("is_active", true),
-    supabase.from("panel_sector_clusters").select("sector_id"),
+  const [{ data: categories }, { data: clusters }] = await Promise.all([
+    supabase.from("sector_categories").select("id"),
+    supabase.from("panel_sector_clusters").select("sector_category_id"),
   ]);
-  const assigned = new Set((clusters ?? []).map((c) => c.sector_id));
-  return (sectors ?? []).filter((s) => !assigned.has(s.id)).map((s) => s.id);
+  const assigned = new Set((clusters ?? []).map((c) => c.sector_category_id));
+  return (categories ?? []).filter((c) => !assigned.has(c.id)).map((c) => c.id);
 }

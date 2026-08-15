@@ -26,34 +26,26 @@
  *  3. Numeric (NUM) items are only auto-scored when they carry a
  *     benchmarkKey (only C12, training hours, does — doc's prose names
  *     it as a benchmark example even though the item table tags it NUM
- *     not PCT), OR are D7/I5 (see 5 below, NECA-confirmed rules — no
- *     longer informational). Any other NUM item without a benchmarkKey
- *     is still informational: excluded from the Stage 1 denominator like
- *     an N/A item, since the doc never resolves how a general count-type
- *     metric would be benchmarked.
+ *     not PCT). Any other NUM item without a benchmarkKey is still
+ *     informational: excluded from the Stage 1 denominator like an N/A
+ *     item, since the doc never resolves how a general count-type metric
+ *     would be benchmarked.
  *  4. Multi-select (MSEL) breadth scoring: 0 selections = 0%, 1–2 = 50%,
  *     3+ = 100% of the item's weight. Doc says "breadth and relevance,
  *     capped at the item's max weight" without a formula — relevance
  *     (whether selections are substantiated) is explicitly a Stage 2
  *     Jury judgment, not part of this Stage 1 auto-score.
- *  5. D7 (industrial actions/strikes) and I5 (youth internship ratio) —
- *     confirmed directly by NECA, fixed rules rather than a general
- *     formula:
- *     - D7 is an inverse fixed lookup (fewer strikes score higher, unlike
- *       every other frequency-style item): 0 → 100%, 1 → 60%, 2 → 30%,
- *       3+ → 0%.
- *     - I5's ratio = (I5's raw count) / (Section A employeeCount), banded
- *       0% → 0%, (0%, 1%] → 50%, (1%, 3%] → 80%, >3% → 100%. The table
- *       NECA gave states each band's *displayed* bounds sharing an
- *       endpoint (e.g. "1%" appears in both the 2nd and 3rd rows) — read
- *       as the standard up-to-and-including convention for the upper
- *       bound of each band, so 1% itself lands in the 80% band and 3%
- *       itself lands in the 80% band, not the 100% one. Stays Advanced
- *       track (unchanged) — NECA's own reasoning: a Mandatory ratio would
- *       unfairly favor larger companies. employeeCount missing/zero is
- *       treated as unable to compute (0%, not excluded) rather than
- *       blocking submission — a data-integrity gap, not grounds to stall
- *       an applicant.
+ *
+ * D7 (industrial actions/strikes) and I5 (youth internship ratio) used to
+ * have NECA-confirmed fixed-lookup rules here (an inverse frequency table
+ * for D7, an employeeCount-relative ratio band for I5). Both items were
+ * deleted outright in NECA's framework revision (102 -> 81 items) — not
+ * revised, removed — so their scoring rules were removed with them rather
+ * than left as dead branches keyed to item ids that no longer exist in
+ * lib/mock/framework.ts. employeeCount was only ever consumed by I5's
+ * rule; it's been dropped from this file's signatures entirely along with
+ * it (see call sites: app/(portals)/secretariat/applications/[id]/page.tsx,
+ * lib/actions/submission.ts, lib/data/reports.ts).
  */
 
 import type {
@@ -93,30 +85,6 @@ function benchmarkScorePercent(bands: BenchmarkBand[], benchmarkKey: string, sec
   return range?.scorePercent ?? 0;
 }
 
-/** D7's fixed inverse lookup — see file header note 5. */
-function d7ScorePercent(strikeCount: number): number {
-  const count = Math.max(0, strikeCount);
-  if (count === 0) return 100;
-  if (count === 1) return 60;
-  if (count === 2) return 30;
-  return 0;
-}
-
-/**
- * I5's youth internship ratio — see file header note 5. Returns 0 (not
- * null — I5 still contributes, just as a 0) when employeeCount is
- * missing/zero, since that's a data-integrity gap on Section A, not a
- * reason to exclude an otherwise-answered Advanced item from scoring.
- */
-function i5ScorePercent(youthInternCount: number, employeeCount: number | null): number {
-  if (!employeeCount || employeeCount <= 0) return 0;
-  const ratio = Math.max(0, youthInternCount) / employeeCount;
-  if (ratio === 0) return 0;
-  if (ratio <= 0.01) return 50;
-  if (ratio <= 0.03) return 80;
-  return 100;
-}
-
 /**
  * Returns null when the item doesn't contribute to the Stage 1 pillar
  * denominator at all (N/A, narrative, or an un-benchmarked NUM item) —
@@ -126,8 +94,7 @@ export function itemScorePercent(
   item: AssessmentItem,
   answer: AssessmentAnswer | undefined,
   benchmarkBands: BenchmarkBand[],
-  sectorId: string,
-  employeeCount: number | null
+  sectorId: string
 ): number | null {
   if (!answer || answer.isNA) return null;
   const value = answer.value;
@@ -151,8 +118,6 @@ export function itemScorePercent(
     }
     case "numeric": {
       if (typeof value !== "number") return null;
-      if (item.id === "D7") return d7ScorePercent(value);
-      if (item.id === "I5") return i5ScorePercent(value, employeeCount);
       if (!item.benchmarkKey) return null; // other NUM items — see file header note 3
       return benchmarkScorePercent(benchmarkBands, item.benchmarkKey, sectorId, value);
     }
@@ -190,15 +155,14 @@ export function computePillarStage1Score(
   isUnionised: boolean,
   answers: AssessmentAnswer[],
   benchmarkBands: BenchmarkBand[],
-  sectorId: string,
-  employeeCount: number | null
+  sectorId: string
 ): PillarStage1Result {
   const items = effectiveItemsForPillar(pillarCode, isUnionised);
 
   const scored = items
     .map((item) => ({
       item,
-      percent: itemScorePercent(item, findAnswer(answers, item.id), benchmarkBands, sectorId, employeeCount),
+      percent: itemScorePercent(item, findAnswer(answers, item.id), benchmarkBands, sectorId),
     }))
     .filter((row): row is { item: AssessmentItem; percent: number } => row.percent !== null);
 
@@ -240,12 +204,11 @@ export function computeStage1Score(
   isUnionised: boolean,
   answers: AssessmentAnswer[],
   benchmarkBands: BenchmarkBand[],
-  sectorId: string,
-  employeeCount: number | null
+  sectorId: string
 ): Stage1ScoreResult {
   const results = pillars
     .filter((p) => p.scored)
-    .map((p) => computePillarStage1Score(p.code, p.weightPoints, isUnionised, answers, benchmarkBands, sectorId, employeeCount));
+    .map((p) => computePillarStage1Score(p.code, p.weightPoints, isUnionised, answers, benchmarkBands, sectorId));
   const overallScore = Math.round(results.reduce((s, r) => s + r.contributionPoints, 0) * 10) / 10;
   return { overallScore, pillars: results };
 }

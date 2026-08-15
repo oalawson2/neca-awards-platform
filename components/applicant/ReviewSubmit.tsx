@@ -23,21 +23,18 @@ export function ReviewSubmit({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [outstandingQuestions, setOutstandingQuestions] = useState<string[] | null>(null);
-  const [outstandingDocuments, setOutstandingDocuments] = useState<string[] | null>(null);
 
   function submit() {
     setError(null);
     setOutstandingQuestions(null);
-    setOutstandingDocuments(null);
     startTransition(async () => {
       const result = await submitStage1Application(applicationId);
       if (!result.success) {
         setError(result.error ?? "Could not submit application.");
         setOutstandingQuestions(result.outstandingQuestions ?? null);
-        setOutstandingDocuments(result.outstandingDocuments ?? null);
         return;
       }
-      router.push("/applicant/submitted");
+      router.push(result.flaggedForMissingDocuments ? "/applicant/submitted?docsFlagged=1" : "/applicant/submitted");
     });
   }
 
@@ -60,9 +57,16 @@ export function ReviewSubmit({
         <SummaryRow
           label="Advanced documents"
           value={`${checklistStatus.advancedUploaded} of ${checklistStatus.advancedTotal} uploaded (optional)`}
-          ok
+          ok={checklistStatus.advancedUploaded === checklistStatus.advancedTotal}
         />
       </div>
+
+      {(!checklistStatus.allMandatoryUploaded || checklistStatus.advancedUploaded < checklistStatus.advancedTotal) && !error && (
+        <p className="text-xs text-text-muted mb-4 leading-relaxed">
+          Missing documents won&rsquo;t stop you submitting — the Secretariat will follow up on anything outstanding
+          separately.
+        </p>
+      )}
 
       {error && (
         <div className="text-sm text-error mb-4">
@@ -75,16 +79,6 @@ export function ReviewSubmit({
                   <li key={q}>{q}</li>
                 ))}
                 {outstandingQuestions.length > 10 && <li>…and {outstandingQuestions.length - 10} more</li>}
-              </ul>
-            </div>
-          )}
-          {outstandingDocuments && (
-            <div className="mt-2">
-              <div className="font-semibold text-xs mb-1">Missing mandatory documents:</div>
-              <ul className="list-disc pl-5">
-                {outstandingDocuments.map((d) => (
-                  <li key={d}>{d}</li>
-                ))}
               </ul>
             </div>
           )}

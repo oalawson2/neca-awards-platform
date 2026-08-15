@@ -4,10 +4,11 @@ import { useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
 import { Spinner } from "@/components/ui/Button";
+import { DocumentPreview } from "@/components/ui/DocumentPreview";
 import { verifyDocumentCredible, flagDocument } from "@/lib/actions/stage2a";
 import { requestInterview } from "@/lib/actions/interviews";
 import { RED_FLAG_LABELS } from "@/types/domain";
-import type { DocumentVerification, RedFlag, RedFlagReason } from "@/types/domain";
+import type { DocumentVerification, RedFlag, RedFlagReason, RequiredDocument } from "@/types/domain";
 import type { DocumentWithVerification } from "@/lib/data/stage2a";
 
 const RED_FLAG_REASONS = Object.keys(RED_FLAG_LABELS) as RedFlagReason[];
@@ -16,6 +17,7 @@ export function DocumentVerificationPanel({
   applicationId,
   organizationName,
   documents,
+  missingDocuments,
   jurorId,
   jurorName,
   redFlagCount,
@@ -24,6 +26,7 @@ export function DocumentVerificationPanel({
   applicationId: string;
   organizationName: string;
   documents: DocumentWithVerification[];
+  missingDocuments: RequiredDocument[];
   jurorId: string;
   jurorName: string;
   redFlagCount: number;
@@ -95,7 +98,12 @@ export function DocumentVerificationPanel({
   }
 
   if (!active) {
-    return <div className="p-8 text-sm text-text-muted">No uploaded documents to verify for this applicant yet.</div>;
+    return (
+      <div className="p-8 flex flex-col gap-6">
+        <div className="text-sm text-text-muted">No uploaded documents to verify for this applicant yet.</div>
+        <MissingDocumentsList missingDocuments={missingDocuments} />
+      </div>
+    );
   }
 
   return (
@@ -146,15 +154,18 @@ export function DocumentVerificationPanel({
               </button>
             ))}
           </div>
+
+          <MissingDocumentsList missingDocuments={missingDocuments} />
         </div>
 
-        <div className="flex-1 p-6 sm:p-8 flex flex-col">
-          <div
-            className="flex-1 border border-border rounded-2xl flex items-center justify-center text-[13px] text-[#AEB1BC] font-mono min-h-56"
-            style={{ backgroundImage: "repeating-linear-gradient(135deg, #FAFAFC, #FAFAFC 10px, #F1F1F5 10px, #F1F1F5 20px)" }}
-          >
-            PDF viewer — {active.fileName}
-          </div>
+        <div className="flex-1 p-6 sm:p-8 flex flex-col min-h-0">
+          {active.storagePath ? (
+            <DocumentPreview key={active.storagePath} storagePath={active.storagePath} fileName={active.fileName ?? active.name} />
+          ) : (
+            <div className="flex-1 flex items-center justify-center text-[13px] text-error min-h-56">
+              No file on record for this document.
+            </div>
+          )}
 
           <div className="mt-5 flex flex-col gap-3">
             <div className="text-[13px] font-semibold">
@@ -199,6 +210,26 @@ export function DocumentVerificationPanel({
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function MissingDocumentsList({ missingDocuments }: { missingDocuments: RequiredDocument[] }) {
+  if (missingDocuments.length === 0) return null;
+
+  return (
+    <div className="mt-5 pt-5 border-t border-border">
+      <div className="text-xs font-bold text-text-muted mb-2.5">
+        NOT UPLOADED ({missingDocuments.length})
+      </div>
+      <div className="flex flex-col gap-2">
+        {missingDocuments.map((d) => (
+          <div key={d.id} className="rounded-xl px-3.5 py-3 border border-dashed border-border">
+            <div className="text-[13px] font-semibold text-text-muted">{d.name}</div>
+            <div className="text-xs text-warning mt-1">Not uploaded — no document to review</div>
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -81,7 +81,11 @@ export async function getPanelSubmissionCount(applicationId: string, round: Scor
   if (!app) return { submitted: 0, total: 0 };
   const { data: org } = await supabase.from("organizations").select("sector_id").eq("id", app.organization_id).maybeSingle();
   if (!org) return { submitted: 0, total: 0 };
-  const { data: cluster } = await supabase.from("panel_sector_clusters").select("panel_id").eq("sector_id", org.sector_id).maybeSingle();
+  // panel_sector_clusters is assigned at the top-level category, not the
+  // sub-sector the organization actually picked — resolve up one level.
+  const { data: sector } = await supabase.from("sectors").select("category_id").eq("id", org.sector_id).maybeSingle();
+  if (!sector) return { submitted: 0, total: 0 };
+  const { data: cluster } = await supabase.from("panel_sector_clusters").select("panel_id").eq("sector_category_id", sector.category_id).maybeSingle();
   if (!cluster) return { submitted: 0, total: 0 };
   const { data: members } = await supabase.from("panel_memberships").select("juror_id").eq("panel_id", cluster.panel_id);
   const jurorIds = (members ?? []).map((m) => m.juror_id);

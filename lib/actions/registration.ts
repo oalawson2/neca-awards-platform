@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { logAction } from "@/lib/data/audit";
+import { getApplicationsClosedStatus } from "@/lib/data/resultsRelease";
 import type { EligibilityDeclarations, Organization } from "@/types/domain";
 
 export type OrganizationProfileInput = Omit<Organization, "id">;
@@ -138,6 +139,16 @@ export async function saveOrganizationProfile(
       success: false,
       error: "Complete organisation name, RC number, sector, size, and contact details before your first save.",
     };
+  }
+
+  // Checked proactively rather than left to surface as an RLS violation on
+  // the applications insert below — applications_insert_own would reject
+  // it either way, but this gives a real, specific message instead of a
+  // raw permission error. Existing drafts are never affected (this is the
+  // create-only path — the applicationId branch above returns first).
+  const { closedAt } = await getApplicationsClosedStatus();
+  if (closedAt) {
+    return { success: false, error: "Applications for this cycle are now closed." };
   }
 
   const { data: newOrg, error: orgInsertError } = await supabase

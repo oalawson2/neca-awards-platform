@@ -50,25 +50,6 @@ export async function getInterviewSession(applicationId: string): Promise<Interv
   return mapSession(supabase, data as InterviewRow);
 }
 
-/**
- * Interviews assigned to this juror, awaiting a scheduled time — real
- * schema has no availability-slot/booking table at all, and applicants
- * have no write access to `interviews` under RLS (verified directly),
- * so there's no self-service booking flow to build against. This
- * replaces the mock's "publish availability slots" page: coordination
- * happens off-platform (email/phone), and the juror records the agreed
- * time here.
- */
-export async function getUnscheduledInterviewsForJuror(jurorId: string): Promise<InterviewSession[]> {
-  const supabase = await createClient();
-  const { data: memberships } = await supabase.from("interview_participants").select("interview_id").eq("juror_id", jurorId);
-  const interviewIds = (memberships ?? []).map((m) => m.interview_id);
-  if (interviewIds.length === 0) return [];
-
-  const { data } = await supabase.from("interviews").select("*").in("id", interviewIds).eq("status", "requested");
-  return Promise.all((data ?? []).map((row) => mapSession(supabase, row as InterviewRow)));
-}
-
 export async function getLiveEvidenceRequests(applicationId: string): Promise<LiveEvidenceRequest[]> {
   const supabase = await createClient();
   const { data: interview } = await supabase.from("interviews").select("id").eq("application_id", applicationId).maybeSingle();

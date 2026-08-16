@@ -74,25 +74,6 @@ export async function requestInterview(applicationId: string, requestingJurorId:
   return { success: true };
 }
 
-/**
- * Records the agreed time directly — no self-service booking flow exists
- * (real schema has no availability-slot table, and applicants have no
- * write access to `interviews` under RLS), so coordination happens
- * off-platform and a juror on the panel enters the outcome here.
- */
-export async function scheduleInterview(applicationId: string, scheduledAtIso: string) {
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("interviews")
-    .update({ scheduled_at: scheduledAtIso, status: "scheduled" })
-    .eq("application_id", applicationId);
-  if (error) return { success: false, error: "Could not schedule the interview." };
-
-  revalidatePath("/jury/availability");
-  revalidatePath("/applicant/interview");
-  return { success: true };
-}
-
 export async function markInterviewCompleted(applicationId: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("interviews").update({ status: "completed" }).eq("application_id", applicationId);

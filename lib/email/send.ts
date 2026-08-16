@@ -22,7 +22,9 @@ import { Resend } from "resend";
 export type EmailTemplate =
   | "interview-invite"
   | "interview-booking-reminder"
-  | "interview-attendance-reminder";
+  | "interview-attendance-reminder"
+  | "interview-slot-booked-juror"
+  | "interview-slot-booked-secretariat";
 
 export interface EmailMessage {
   to: string;
@@ -36,6 +38,8 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "";
 function renderTemplate(message: EmailMessage): string {
   const { organizationName = "there", applicationId = "" } = message.context;
   const interviewLink = `${SITE_URL}/applicant/interview`;
+  const jurorInterviewLink = `${SITE_URL}/jury/interview/${applicationId}`;
+  const secretariatApplicationLink = `${SITE_URL}/secretariat/applications/${applicationId}`;
 
   const wrap = (bodyHtml: string) => `
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;max-width:520px;margin:0 auto;color:#1A1442;">
@@ -69,6 +73,28 @@ function renderTemplate(message: EmailMessage): string {
         <p style="font-size:15px;">Hello ${organizationName},</p>
         <p style="font-size:14px;line-height:1.6;">This is a reminder that your NECA Excellence Awards panel interview is scheduled for <strong>${when}</strong>.</p>
         <p style="margin:28px 0;"><a href="${interviewLink}" style="background:#251C5B;color:#fff;padding:13px 24px;border-radius:10px;text-decoration:none;font-weight:600;font-size:14px;">View interview details →</a></p>
+      `);
+    }
+    case "interview-slot-booked-juror": {
+      const when = message.context.scheduledAt
+        ? new Date(message.context.scheduledAt).toLocaleString("en-NG", { dateStyle: "full", timeStyle: "short", timeZone: "Africa/Lagos" })
+        : "soon";
+      const format = message.context.format === "physical" ? "in person" : "virtual";
+      return wrap(`
+        <p style="font-size:15px;">Hello,</p>
+        <p style="font-size:14px;line-height:1.6;"><strong>${organizationName}</strong> has booked their panel interview slot for <strong>${when}</strong> (${format}).</p>
+        <p style="margin:28px 0;"><a href="${jurorInterviewLink}" style="background:#251C5B;color:#fff;padding:13px 24px;border-radius:10px;text-decoration:none;font-weight:600;font-size:14px;">View in your portal →</a></p>
+      `);
+    }
+    case "interview-slot-booked-secretariat": {
+      const when = message.context.scheduledAt
+        ? new Date(message.context.scheduledAt).toLocaleString("en-NG", { dateStyle: "full", timeStyle: "short", timeZone: "Africa/Lagos" })
+        : "soon";
+      const format = message.context.format === "physical" ? "in person" : "virtual";
+      return wrap(`
+        <p style="font-size:15px;">Hello,</p>
+        <p style="font-size:14px;line-height:1.6;"><strong>${organizationName}</strong> has booked their panel interview slot for <strong>${when}</strong> (${format}).</p>
+        <p style="margin:28px 0;"><a href="${secretariatApplicationLink}" style="background:#251C5B;color:#fff;padding:13px 24px;border-radius:10px;text-decoration:none;font-weight:600;font-size:14px;">View application →</a></p>
       `);
     }
   }

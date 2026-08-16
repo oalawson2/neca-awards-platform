@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { href: "/secretariat/users", label: "Users & Roles" },
   { href: "/secretariat/criteria", label: "Sectors & Framework" },
   { href: "/secretariat/panels", label: "Jury Panels" },
+  { href: "/secretariat/interviews", label: "Interview Slots" },
   { href: "/secretariat/ai-reports", label: "AI Reports" },
   { href: "/secretariat/winners", label: "Winners" },
   { href: "/secretariat/audit-log", label: "Audit Log" },

@@ -142,7 +142,7 @@ export async function uploadDocument(applicationId: string, itemCode: string, fo
     .from("application-documents")
     .upload(path, storedBuffer, { contentType, upsert: false });
   if (uploadError) {
-    return { success: false, error: "Upload failed. You can only upload documents while your application is still a draft." };
+    return { success: false, error: "Upload failed. You can only upload documents while your application is a draft, or while it's flagged for eligibility review." };
   }
 
   const { error: insertError } = await supabase.from("document_evidence").insert({

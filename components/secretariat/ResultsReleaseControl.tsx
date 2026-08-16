@@ -43,7 +43,7 @@ export function ResultsReleaseControl({ releasedAt }: { releasedAt: string | nul
   if (releasedAt) {
     return (
       <div className="border border-border rounded-2xl px-5 py-4 max-w-md">
-        <div className="font-bold text-sm text-navy-dark">Applications closed — results released</div>
+        <div className="font-bold text-sm text-navy-dark">Results released</div>
         <div className="text-xs text-text-muted mt-0.5">
           Released {new Date(releasedAt).toLocaleString("en-NG", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Lagos" })}. Every
           applicant can now see their shortlisted/not-shortlisted outcome.
@@ -58,11 +58,12 @@ export function ResultsReleaseControl({ releasedAt }: { releasedAt: string | nul
 
   return (
     <div className="border border-border rounded-2xl px-5 py-4 max-w-md">
-      <div className="font-bold text-sm text-navy-dark">Close Applications &amp; Release Results</div>
+      <div className="font-bold text-sm text-navy-dark">Release Results</div>
       <div className="text-xs text-text-muted mt-0.5 leading-relaxed">
         Applicants can&rsquo;t see whether they were shortlisted until you do this — Apply Shortlist (per sector, on the
         Shortlisting screen) only decides the outcome, it doesn&rsquo;t show it to anyone. Run this once every sector&rsquo;s
-        shortlist is finalized.
+        shortlist is finalized. Independent of Close Applications below — releasing results doesn&rsquo;t require
+        applications to be closed first.
       </div>
       {error && <div className="text-xs text-error mt-2">{error}</div>}
       {confirming ? (
@@ -76,7 +77,7 @@ export function ResultsReleaseControl({ releasedAt }: { releasedAt: string | nul
         </div>
       ) : (
         <Button size="sm" className="mt-3" onClick={() => setConfirming(true)}>
-          Close Applications &amp; Release Results
+          Release Results
         </Button>
       )}
     </div>

@@ -468,14 +468,22 @@ export interface LiveEvidenceRequest {
   receivedAt: string | null;
 }
 
-export interface InterviewAvailabilitySlot {
+/**
+ * Secretariat-published, per-panel interview slot (doc section 11.3's
+ * scheduling step, rebuilt on real data — the whole panel sits an
+ * interview together, per InterviewSession.assignedJurorIds, so slots are
+ * offered per panel rather than per individual juror). Unbooked until an
+ * applicant claims it (interviewId/bookedAt set), at which point it's
+ * exclusively tied to that one interview.
+ */
+export interface AvailabilitySlot {
   id: string;
-  jurorId: string;
-  date: string;
-  startTime: string;
-  endTime: string;
-  booked: boolean;
-  bookedByApplicationId?: string | null;
+  panelId: string;
+  startsAt: string;
+  durationMinutes: number;
+  format: "virtual" | "physical";
+  interviewId: string | null;
+  bookedAt: string | null;
 }
 
 // ===========================================================================

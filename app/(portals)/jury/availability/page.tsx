@@ -1,20 +1,15 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
-import { getUnscheduledInterviewsForJuror } from "@/lib/data/interviews";
-import { getApplication } from "@/lib/data/applications";
+import { getPanelForJuror } from "@/lib/data/users";
+import { getSlotsForPanel } from "@/lib/data/interviewSlots";
 import { AvailabilityGrid } from "@/components/jury/AvailabilityGrid";
 
 export default async function JuryAvailabilityPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const sessions = await getUnscheduledInterviewsForJuror(user.id);
-  const withOrgNames = await Promise.all(
-    sessions.map(async (session) => {
-      const application = await getApplication(session.applicationId);
-      return { ...session, organizationName: application?.organization.name ?? session.applicationId };
-    })
-  );
+  const panel = await getPanelForJuror(user.id);
+  const slots = panel ? await getSlotsForPanel(panel.id) : [];
 
-  return <AvailabilityGrid interviews={withOrgNames} />;
+  return <AvailabilityGrid panelName={panel?.name ?? null} slots={slots} />;
 }

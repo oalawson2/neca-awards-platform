@@ -10,10 +10,13 @@ export function DocumentChecklist({
   applicationId,
   groups,
   readOnly = false,
+  reopenedForReview = false,
 }: {
   applicationId: string;
   groups: ChecklistGroup[];
   readOnly?: boolean;
+  /** Submitted, but eligibility_review_needed reopened uploads — distinct from the normal draft-editing state, so the UI explains why uploads are open despite submission. */
+  reopenedForReview?: boolean;
 }) {
   const router = useRouter();
   const [uploadingId, setUploadingId] = useState<string | null>(null);
@@ -70,6 +73,13 @@ export function DocumentChecklist({
         <div className="text-[13px] text-navy bg-[#F1F1FB] border border-border rounded-2xl px-4 py-3 mb-6">
           Your application has been submitted, so new uploads are closed here. If the Secretariat needs anything
           further from you, they&rsquo;ll be in touch directly.
+        </div>
+      )}
+
+      {reopenedForReview && (
+        <div className="text-[13px] text-warning bg-[#FDF6E9] border border-[#F0DFA8] rounded-2xl px-4 py-3 mb-6">
+          The Secretariat flagged something on your eligibility declarations and is reviewing your application.
+          You can upload or update documents here while that&rsquo;s outstanding.
         </div>
       )}
 

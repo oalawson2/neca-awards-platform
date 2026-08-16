@@ -13,5 +13,12 @@ export default async function ApplicantDocumentsPage() {
 
   const groups = await getChecklistGrouped(application.id);
 
-  return <DocumentChecklist applicationId={application.id} groups={groups} readOnly={application.status !== "draft"} />;
+  return (
+    <DocumentChecklist
+      applicationId={application.id}
+      groups={groups}
+      readOnly={application.status !== "draft" && !application.eligibilityFlagged}
+      reopenedForReview={application.status !== "draft" && application.eligibilityFlagged}
+    />
+  );
 }

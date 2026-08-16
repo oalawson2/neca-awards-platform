@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
-import { getResultsReleaseStatus } from "@/lib/data/resultsRelease";
+import { getResultsReleaseStatus, getApplicationsClosedStatus } from "@/lib/data/resultsRelease";
 import { ResultsReleaseControl } from "@/components/secretariat/ResultsReleaseControl";
+import { CloseApplicationsControl } from "@/components/secretariat/CloseApplicationsControl";
 
 /**
  * The old single advancement-threshold setting is gone — Section A
@@ -15,7 +16,7 @@ export default async function SettingsPage() {
   const user = await getCurrentUser();
   if (user?.role !== "secretariat_super_admin") redirect("/secretariat");
 
-  const { releasedAt } = await getResultsReleaseStatus();
+  const [{ releasedAt }, { closedAt }] = await Promise.all([getResultsReleaseStatus(), getApplicationsClosedStatus()]);
 
   const links = [
     { href: "/secretariat/shortlisting", label: "Shortlisting", desc: "Per-sector shortlist count/percentage cutoffs" },
@@ -39,7 +40,10 @@ export default async function SettingsPage() {
           ))}
         </div>
 
-        <div className="text-xs font-bold text-[#AEB1BC] mt-8 mb-2.5">RESULTS</div>
+        <div className="text-xs font-bold text-[#AEB1BC] mt-8 mb-2.5">APPLICATIONS</div>
+        <CloseApplicationsControl closedAt={closedAt} />
+
+        <div className="text-xs font-bold text-[#AEB1BC] mt-6 mb-2.5">RESULTS</div>
         <ResultsReleaseControl releasedAt={releasedAt} />
       </div>
     </div>

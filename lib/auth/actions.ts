@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/lib/data/audit";
+import { isEmailSendFailure } from "@/lib/supabase/errors";
 import type { UserRole } from "@/types/auth";
 
 export interface AuthResult {
@@ -164,6 +165,56 @@ export async function signUpApplicant(input: SignUpInput): Promise<AuthResult> {
     return { success: false, error: profileResult.error };
   }
   return { success: true, role: profileResult.role };
+}
+
+export interface PasswordResetResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Real Supabase Auth password recovery. Always returns success on a
+ * well-formed email, whether or not an account exists for it — that's
+ * Supabase's own behavior (resetPasswordForEmail doesn't distinguish
+ * "no such user" from "sent"), and this preserves it rather than probing
+ * for a distinguishable error, so the form can't be used to enumerate
+ * registered emails. Genuine failures (rate limiting, SMTP misconfigured)
+ * still surface via `error`.
+ *
+ * The email links to /auth/callback?next=/reset-password — Supabase's
+ * PKCE flow (the @supabase/ssr default) means the link itself points at
+ * Supabase's own verify endpoint, which redirects here with a `code` once
+ * verified; the callback route exchanges that for the session
+ * /reset-password needs to actually call updateUser().
+ */
+export async function requestPasswordReset(email: string): Promise<PasswordResetResult> {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) return { success: false, error: "Enter your email address." };
+
+  const supabase = await createClient();
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
+  const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+    redirectTo: `${siteUrl}/auth/callback?next=${encodeURIComponent("/reset-password")}`,
+  });
+  if (error) {
+    console.error("[requestPasswordReset] failed for", normalizedEmail, "-", {
+      message: error.message,
+      code: error.code,
+      status: error.status,
+    });
+    if (isEmailSendFailure(error)) {
+      return {
+        success: false,
+        error:
+          "The reset link couldn't be sent. Most likely cause: Resend is still in sandbox mode " +
+          "(no verified sending domain), which only allows mail to the Resend account's own inbox — check " +
+          "resend.com/domains and the \"from\" address in Supabase's Auth SMTP settings. For the exact " +
+          "underlying error, check Supabase Dashboard -> Logs -> Auth.",
+      };
+    }
+    return { success: false, error: error.message };
+  }
+  return { success: true };
 }
 
 export async function signOut(): Promise<void> {

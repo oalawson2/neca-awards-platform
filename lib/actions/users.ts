@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { logAction } from "@/lib/data/audit";
+import { isEmailSendFailure } from "@/lib/supabase/errors";
 
 export interface InviteResult {
   success: boolean;
@@ -35,20 +36,6 @@ async function requireSecretariat(): Promise<InviteResult | null> {
  */
 function logInviteError(context: string, error: { message: string; code?: string; status?: number }) {
   console.error(`[inviteUser] ${context}:`, { message: error.message, code: error.code, status: error.status });
-}
-
-/**
- * error.message is not a reliable signal on its own — confirmed live that
- * the SDK sometimes hands back the literal string "{}" instead of
- * GoTrue's actual "Error sending invite email" text for the exact same
- * failure (an empty/malformed error body the SDK couldn't parse into its
- * usual shape). status is the reliable part: email_exists and other
- * expected rejections come back 4xx; a bare 500 with no more specific
- * code from this endpoint is GoTrue's generic "unexpected_failure"
- * bucket, which in practice here is the email-send step.
- */
-function isSendFailure(error: { message: string; code?: string; status?: number }): boolean {
-  return error.code === "unexpected_failure" || error.status === 500 || /error sending/i.test(error.message);
 }
 
 const SEND_FAILURE_MESSAGE =
@@ -91,7 +78,7 @@ export async function inviteUser(input: { name: string; email: string; role: "se
     if (error.code === "email_exists" || /already registered/i.test(error.message)) {
       return { success: false, error: "A user with this email already exists." };
     }
-    if (isSendFailure(error)) {
+    if (isEmailSendFailure(error)) {
       return { success: false, error: SEND_FAILURE_MESSAGE };
     }
     return { success: false, error: error.message };
@@ -124,7 +111,7 @@ export async function resendInvite(userId: string): Promise<InviteResult> {
   const { error } = await admin.auth.admin.inviteUserByEmail(user.user.email);
   if (error) {
     logInviteError(`resend inviteUserByEmail failed for ${user.user.email}`, error);
-    if (isSendFailure(error)) {
+    if (isEmailSendFailure(error)) {
       return { success: false, error: SEND_FAILURE_MESSAGE };
     }
     return { success: false, error: error.message };

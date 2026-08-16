@@ -53,9 +53,9 @@ export function LoginForm() {
         />
       </div>
       <div className="text-right mb-5">
-        <a href="#" className="text-[13px]" title="Not wired up in this mock-data phase">
+        <Link href="/forgot-password" className="text-[13px]">
           Forgot password?
-        </a>
+        </Link>
       </div>
       <Button type="submit" className="w-full" loading={isPending}>
         {isPending ? "Signing in…" : "Sign in"}

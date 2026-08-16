@@ -69,28 +69,20 @@ export async function deleteAvailabilitySlot(slotId: string): Promise<SlotAction
 }
 
 /**
- * Applicant-initiated booking. Authorization is checked via the
- * applicant's own (RLS-scoped) client first — the interview lookup below
- * only ever finds a row if `application_is_mine` allows it — but the
- * actual claim runs through the admin client, same as the `interviews`
- * update right after it.
- *
- * This intentionally does NOT use avail_slots_update_applicant_booking's
- * own UPDATE grant, even though RLS is set up for the applicant to claim
- * the row directly: that update reproducibly fails with "new row violates
- * row-level security policy for table interview_availability_slots" —
- * confirmed via both the real app and isolated reproduction, independent
- * of whether the update requests a row back (no .select()/RETURNING
- * either way) and independent of the overlapping avail_slots_all_secretariat
- * policy (removed and re-added during isolation testing, no change).
- * Standalone, the WITH CHECK's own boolean condition evaluates true for
- * this exact row/user — so this looks like a real Postgres/PostgREST
- * edge case with the EXISTS-against-another-RLS-table shape of that
- * policy, not an authorization bug in the policy's intent. Flagged back
- * for a closer look; the admin-client path here enforces the identical
- * rule in application code as a reliable stand-in and is not a security
- * gap — every check the RLS would have made (own interview, requested
- * status, right panel, slot still open) still happens here first.
+ * Applicant-initiated booking. Claims the slot through the applicant's
+ * own (RLS-scoped) client — avail_slots_update_applicant_booking
+ * guarantees it's unbooked, belongs to the panel handling their own
+ * `requested` interview, and that they can only ever set interview_id to
+ * their own interview; avail_slots_select_applicant_own_booking covers
+ * reading the row back afterward, which is what the earlier version of
+ * this function's admin-client workaround was standing in for (that
+ * policy didn't exist yet — a row an applicant just booked wasn't
+ * SELECT-visible to them under any policy, so requesting it back via
+ * .select() failed as a row-level security violation on what looked
+ * like an unrelated UPDATE; fixed on the schema side, not here).
+ * `interviews` itself still has no applicant write policy at all, so
+ * that update (and any rollback if it fails) goes through the admin
+ * client instead.
  */
 export async function bookInterviewSlot(applicationId: string, slotId: string): Promise<SlotActionResult> {
   const user = await getCurrentUser();
@@ -105,29 +97,18 @@ export async function bookInterviewSlot(applicationId: string, slotId: string): 
     .maybeSingle();
   if (!interview) return { success: false, error: "No interview request found to book against." };
 
-  const { data: slotBeforeBooking } = await supabase
+  const { data: bookedSlot, error: slotError } = await supabase
     .from("interview_availability_slots")
-    .select("starts_at, duration_minutes, format")
+    .update({ interview_id: interview.id, booked_at: new Date().toISOString() })
     .eq("id", slotId)
-    .eq("panel_id", interview.panel_id)
     .is("interview_id", null)
+    .select("starts_at, duration_minutes, format")
     .maybeSingle();
-  if (!slotBeforeBooking) return { success: false, error: "This slot is no longer available — pick another." };
-
-  const admin = createAdminClient();
-  // Still an atomic, race-safe claim: the WHERE clause (id + still-open)
-  // means only the first of two concurrent bookers actually updates a
-  // row, same as it would under RLS.
-  const { error: slotError, count } = await admin
-    .from("interview_availability_slots")
-    .update({ interview_id: interview.id, booked_at: new Date().toISOString() }, { count: "exact" })
-    .eq("id", slotId)
-    .is("interview_id", null);
-  if (slotError || count !== 1) {
+  if (slotError || !bookedSlot) {
     return { success: false, error: "This slot was just booked by someone else — pick another." };
   }
-  const bookedSlot = slotBeforeBooking;
 
+  const admin = createAdminClient();
   const { error: interviewError } = await admin
     .from("interviews")
     .update({

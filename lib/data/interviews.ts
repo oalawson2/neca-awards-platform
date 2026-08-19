@@ -50,6 +50,14 @@ export async function getInterviewSession(applicationId: string): Promise<Interv
   return mapSession(supabase, data as InterviewRow);
 }
 
+/** Which of these applications have an interview session at all — one query, used to decide whether the jury top nav's Interview tab has anywhere to point for the applicant currently in view. */
+export async function getApplicationIdsWithInterviewSessions(applicationIds: string[]): Promise<string[]> {
+  if (applicationIds.length === 0) return [];
+  const supabase = await createClient();
+  const { data } = await supabase.from("interviews").select("application_id").in("application_id", applicationIds);
+  return (data ?? []).map((r) => r.application_id);
+}
+
 export async function getLiveEvidenceRequests(applicationId: string): Promise<LiveEvidenceRequest[]> {
   const supabase = await createClient();
   const { data: interview } = await supabase.from("interviews").select("id").eq("application_id", applicationId).maybeSingle();

@@ -7,20 +7,32 @@ import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
 import { signOut } from "@/lib/auth/actions";
 
-export function JuryTabNav({ userName, defaultApplicationId }: { userName: string; defaultApplicationId?: string }) {
+export function JuryTabNav({
+  userName,
+  defaultApplicationId,
+  applicationIdsWithInterviews = [],
+}: {
+  userName: string;
+  defaultApplicationId?: string;
+  applicationIdsWithInterviews?: string[];
+}) {
   const pathname = usePathname();
 
   // Documents/Scorecard/Interview all key off the same [applicationId]
-  // segment — while viewing any one of them, the other two tabs should
-  // follow the applicant currently in context, not fall back to whichever
+  // segment — while viewing any one of them, the other tabs should follow
+  // the applicant currently in context, not fall back to whichever
   // applicant happened to be first in this juror's assignment list.
   const contextMatch = pathname.match(/^\/jury\/(?:documents|scorecard|interview)\/([^/]+)/);
   const applicationId = contextMatch?.[1] ?? defaultApplicationId;
+  const hasInterview = !!applicationId && applicationIdsWithInterviews.includes(applicationId);
 
   const items = [
     { href: "/jury", label: "Dashboard", short: "Dashboard" },
     { href: applicationId ? `/jury/documents/${applicationId}` : "/jury", match: "/jury/documents", label: "Documents", short: "Docs" },
     { href: applicationId ? `/jury/scorecard/${applicationId}` : "/jury", match: "/jury/scorecard", label: "Scorecard", short: "Score" },
+    ...(hasInterview
+      ? [{ href: `/jury/interview/${applicationId}`, match: "/jury/interview", label: "Interview", short: "Interview" }]
+      : []),
     { href: "/jury/availability", label: "Availability", short: "Available" },
     { href: "/jury/employer-of-year", label: "Employer of the Year", short: "EOTY" },
   ];

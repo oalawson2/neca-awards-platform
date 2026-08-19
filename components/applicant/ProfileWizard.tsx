@@ -6,6 +6,7 @@ import { Label, Input, Select, Checkbox } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { saveOrganizationProfile } from "@/lib/actions/registration";
+import { useScrollTopOnChange } from "@/lib/hooks/useScrollTopOnChange";
 import {
   GEOGRAPHICAL_COVERAGE_LABELS,
   ORG_SIZE_LABELS,
@@ -42,6 +43,7 @@ export function ProfileWizard({
 }) {
   const router = useRouter();
   const [step, setStep] = useState(0);
+  useScrollTopOnChange(step);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   // Set once the first save creates the application — every save after

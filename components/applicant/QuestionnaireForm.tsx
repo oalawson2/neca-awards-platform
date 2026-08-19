@@ -8,6 +8,7 @@ import { AssessmentItemField } from "@/components/applicant/AssessmentItemField"
 import { saveAnswer } from "@/lib/actions/answers";
 import { effectiveItemsForPillar } from "@/lib/scoring/stage1";
 import { PILLARS } from "@/lib/mock/framework";
+import { useScrollTopOnChange } from "@/lib/hooks/useScrollTopOnChange";
 import type { AnswerValue, AssessmentAnswer, PillarCode } from "@/types/domain";
 
 const SCORED_PILLARS = PILLARS.filter((p) => p.scored);
@@ -25,6 +26,7 @@ export function QuestionnaireForm({
 }) {
   const router = useRouter();
   const [pillarIndex, setPillarIndex] = useState(0);
+  useScrollTopOnChange(pillarIndex);
   const [answersByItem, setAnswersByItem] = useState<Record<string, AssessmentAnswer>>(
     Object.fromEntries(initialAnswers.map((a) => [a.itemId, a]))
   );

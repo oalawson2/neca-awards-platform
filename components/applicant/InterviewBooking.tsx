@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { bookInterviewSlot } from "@/lib/actions/interviewSlots";
 import { formatDate } from "@/lib/utils";
+import { useScrollTopOnChange } from "@/lib/hooks/useScrollTopOnChange";
 import type { AvailabilitySlot, InterviewSession } from "@/types/domain";
 
 function formatSlotTime(iso: string): string {
@@ -31,6 +32,7 @@ export function InterviewBooking({
   const [isPending, startTransition] = useTransition();
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  useScrollTopOnChange(session?.status ?? "none");
 
   if (!session) {
     return (

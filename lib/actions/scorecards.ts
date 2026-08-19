@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { logAction } from "@/lib/data/audit";
 import { PILLARS, SECTION_DB_IDS } from "@/lib/mock/framework";
@@ -83,19 +84,19 @@ export interface SubmitScorecardResult {
 
 /**
  * Finalizes all 8 pillar scorecards at once (sets submitted_at), blocked
- * until every pillar has all 4 dimensions filled. Logs one audit entry
- * per pillar comparing the Stage 1 self-declared score to this juror's
- * Stage 2 pillar score (doc section 12).
+ * until every pillar has all 4 dimensions filled.
  *
- * Does NOT attempt to auto-transition application.status once "the whole
- * panel is done" — unlike the mock version this replaces. A juror's own
- * RLS-scoped session can only ever see their own juror_scores rows until
- * applications.stage2_scoring_closed=true (verified against pg_policies),
- * so it structurally cannot detect panel-wide completion. That's now
- * closeStage2Scoring's job — a genuinely Secretariat-only action, which
- * matches stage2_scoring_closed/_at/_by existing as real columns in the
- * first place: closing the blind-scoring window was always meant to be a
- * deliberate Secretariat call, not something that fires itself.
+ * After recording this juror's own submission, checks whether that was
+ * the last of the panel and auto-closes scoring if so (finalizeStage2Scoring,
+ * same as the Secretariat-only closeStage2Scoring uses) — this juror's own
+ * RLS-scoped session can't see peers' juror_scores rows or write
+ * applications.status (blind scoring is enforced by RLS itself, gated on
+ * applications.stage2_scoring_closed), so that check and the resulting
+ * write both go through the service-role admin client, the one legitimate
+ * way to look past blind scoring's RLS from here. Guarded against
+ * double-closing (skips if stage2_scoring_closed is already true) so a
+ * near-simultaneous submit from two jurors, or a Secretariat manual close
+ * racing this, can't both try to finalize.
  */
 export async function submitScorecard(applicationId: string, jurorId: string, jurorName: string, round: ScorecardRound = "sector"): Promise<SubmitScorecardResult> {
   const supabase = await createClient();
@@ -139,30 +140,39 @@ export async function submitScorecard(applicationId: string, jurorId: string, ju
   // rather than bolting on a partial version here.
   await logAction(jurorName, "Submitted pillar scorecard for", org?.name ?? applicationId);
 
+  if (!isEoy) {
+    const admin = createAdminClient();
+    const { data: appRow } = await admin.from("applications").select("stage2_scoring_closed").eq("id", applicationId).maybeSingle();
+    if (appRow && !appRow.stage2_scoring_closed) {
+      const { submitted, total } = await getPanelSubmissionCount(applicationId, "sector", admin);
+      if (total > 0 && submitted === total) {
+        await finalizeStage2Scoring(admin, applicationId, null, "System");
+      }
+    }
+  }
+
   revalidatePath(`/jury/scorecard/${applicationId}`);
   return { success: true };
 }
 
 /**
- * Secretariat-only: closes the blind-scoring window for this application
- * (stage2_scoring_closed=true, which is what RLS itself gates peer
- * juror_scores visibility on), computes and stores the panel-averaged
- * Verified Score, and advances the application to stage2_scored. Uses the
- * Secretariat's own session — unlike a juror's, it can see every panel
- * member's raw scores unconditionally (scores_select_secretariat), which
- * is what makes computing the real panel average possible here at all.
+ * Shared by closeStage2Scoring (Secretariat-initiated) and submitScorecard's
+ * auto-close (juror-initiated, once their submission completes the whole
+ * panel) — both already know the panel is fully submitted by the time they
+ * call this; it just computes and stores the panel-averaged Verified Score
+ * and advances the application to stage2_scored. Takes whichever client
+ * the caller already has: the Secretariat's own session can see every
+ * panel member's raw scores unconditionally (scores_select_secretariat)
+ * and can write applications.status itself (applications_update_secretariat),
+ * so it reuses that; the juror auto-close path has neither, so it passes
+ * the service-role admin client instead.
  */
-export async function closeStage2Scoring(applicationId: string): Promise<{ success: boolean; error?: string; verifiedScore?: number }> {
-  const user = await getCurrentUser();
-  if (!user || (user.role !== "secretariat" && user.role !== "secretariat_super_admin")) {
-    return { success: false, error: "Only Secretariat can close scoring." };
-  }
-
-  const { submitted, total } = await getPanelSubmissionCount(applicationId, "sector");
-  if (total === 0) return { success: false, error: "No panel is assigned to this applicant's sector yet." };
-  if (submitted < total) return { success: false, error: `Only ${submitted} of ${total} panel jurors have submitted so far.` };
-
-  const supabase = await createClient();
+async function finalizeStage2Scoring(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  applicationId: string,
+  closedByUserId: string | null,
+  closedByName: string
+): Promise<{ success: boolean; error?: string; verifiedScore?: number }> {
   const { data: rows } = await supabase
     .from("juror_scores")
     .select("section_id, policy_exists, implementation, evidence_quality, measurable_impact")
@@ -190,15 +200,39 @@ export async function closeStage2Scoring(applicationId: string): Promise<{ succe
     .update({
       stage2_scoring_closed: true,
       stage2_scoring_closed_at: now,
-      stage2_scoring_closed_by: user.id,
+      stage2_scoring_closed_by: closedByUserId,
       verified_score: overall,
       status: "stage2_scored",
     })
     .eq("id", applicationId);
   if (error) return { success: false, error: "Could not close scoring." };
 
-  await logAction(user.fullName || user.email, "Closed Stage 2 scoring for", applicationId);
+  await logAction(closedByName, "Closed Stage 2 scoring for", applicationId);
   revalidatePath("/secretariat/live-scoring");
   revalidatePath(`/secretariat/applications/${applicationId}`);
   return { success: true, verifiedScore: overall };
+}
+
+/**
+ * Secretariat-only: closes the blind-scoring window for this application
+ * (stage2_scoring_closed=true, which is what RLS itself gates peer
+ * juror_scores visibility on) if it isn't closed already. In the normal
+ * flow submitScorecard's auto-close (see below) already does this the
+ * moment the panel finishes — this is the manual backup: for an
+ * application that reached full submission before that auto-close existed,
+ * or if the automatic path ever fails partway (e.g. a transient DB error
+ * after the last juror's submit already recorded).
+ */
+export async function closeStage2Scoring(applicationId: string): Promise<{ success: boolean; error?: string; verifiedScore?: number }> {
+  const user = await getCurrentUser();
+  if (!user || (user.role !== "secretariat" && user.role !== "secretariat_super_admin")) {
+    return { success: false, error: "Only Secretariat can close scoring." };
+  }
+
+  const { submitted, total } = await getPanelSubmissionCount(applicationId, "sector");
+  if (total === 0) return { success: false, error: "No panel is assigned to this applicant's sector yet." };
+  if (submitted < total) return { success: false, error: `Only ${submitted} of ${total} panel jurors have submitted so far.` };
+
+  const supabase = await createClient();
+  return finalizeStage2Scoring(supabase, applicationId, user.id, user.fullName || user.email);
 }

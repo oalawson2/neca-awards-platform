@@ -63,20 +63,25 @@ export async function getMyVerifiedScore(applicationId: string, jurorId: string,
 }
 
 /**
- * Blind scoring is enforced by RLS itself now, which changes what this
- * function can see depending on who's calling it: a juror's own session
- * only ever sees their own juror_scores rows until
+ * Blind scoring is enforced by RLS itself: a juror's own session only ever
+ * sees their own juror_scores rows until
  * applications.stage2_scoring_closed=true (scores_select_panel_after_close);
  * Secretariat's session sees everyone's, unconditionally
- * (scores_select_secretariat). Called from the Secretariat's live-scoring
- * page, this returns real panel-wide progress. Called from a juror's own
- * submit flow, it will under-count peers — by design, not a bug — which
- * is exactly why lib/actions/scorecards.ts's submitScorecard no longer
- * tries to auto-detect "whole panel done" from a juror's own session; see
- * closeStage2Scoring for the (Secretariat-only) real trigger.
+ * (scores_select_secretariat). Called with no `client` override (the
+ * Secretariat's live-scoring page, closeStage2Scoring), this returns real
+ * panel-wide progress from whichever RLS-scoped session is calling.
+ * lib/actions/scorecards.ts's submitScorecard — a juror action, which
+ * needs real cross-juror completion to auto-close scoring once the whole
+ * panel is done — passes the service-role admin client explicitly instead,
+ * the one legitimate way to see past blind-scoring's RLS from a juror's
+ * own request.
  */
-export async function getPanelSubmissionCount(applicationId: string, round: ScorecardRound = "sector"): Promise<{ submitted: number; total: number }> {
-  const supabase = await createClient();
+export async function getPanelSubmissionCount(
+  applicationId: string,
+  round: ScorecardRound = "sector",
+  client?: Awaited<ReturnType<typeof createClient>>
+): Promise<{ submitted: number; total: number }> {
+  const supabase = client ?? (await createClient());
   const { data: app } = await supabase.from("applications").select("organization_id").eq("id", applicationId).maybeSingle();
   if (!app) return { submitted: 0, total: 0 };
   const { data: org } = await supabase.from("organizations").select("sector_id").eq("id", app.organization_id).maybeSingle();

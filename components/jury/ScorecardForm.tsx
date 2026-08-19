@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { saveScorecardDimension, saveInterviewFinding, submitScorecard } from "@/lib/actions/scorecards";
 import { blendedPillarScore } from "@/lib/scoring/stage2";
 import { PILLARS } from "@/lib/mock/framework";
+import { useScrollTopOnChange } from "@/lib/hooks/useScrollTopOnChange";
 import { PILLAR_SCORE_WEIGHTS } from "@/types/domain";
 import type { PillarCode, PillarScorecard, ScorecardRound } from "@/types/domain";
 
@@ -58,6 +59,7 @@ export function ScorecardForm({
     return map;
   });
   const [sectionIndex, setSectionIndex] = useState(0);
+  useScrollTopOnChange(sectionIndex);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [outstandingPillars, setOutstandingPillars] = useState<string[] | null>(null);

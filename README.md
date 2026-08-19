@@ -115,12 +115,27 @@ and run:
 
 This pulls the latest commit, activates the Node virtual environment,
 installs dependencies, builds (with the single-thread workaround this host
-requires), and stages `public/` and `.next/static/` into
-`.next/standalone/` — Next's `output: "standalone"` build doesn't include
-either by default, and missing this step is what used to produce
-unhelpful 500s on static assets that never showed up in the app's own
-logs. The script stops immediately on any failure (`set -e`) rather than
-leaving a partial deploy that looks like it succeeded.
+requires), patches the freshly-built `.next/standalone/server.js` to bind
+`0.0.0.0` unconditionally (see below), and stages `public/` and
+`.next/static/` into `.next/standalone/` — Next's `output: "standalone"`
+build doesn't include either by default, and missing this step is what
+used to produce unhelpful 500s on static assets that never showed up in
+the app's own logs. The script stops immediately on any failure (`set -e`)
+rather than leaving a partial deploy that looks like it succeeded.
+
+**Why the server.js patch is needed:** Next's generated `server.js`
+contains `const hostname = process.env.HOSTNAME || '0.0.0.0'`. This host
+exports an ambient `HOSTNAME` shell variable set to the box's own name
+(`server224.web-hosting.com`), which Passenger inherits when it spawns the
+Node app — so without the patch, Next binds *only* to that resolved
+address instead of all interfaces. Passenger/LiteSpeed proxy to the app
+over localhost/a private socket, so an app that isn't listening on
+`0.0.0.0` is unreachable from them even though it runs fine and returns
+real 200s when hit directly by that exact hostname — the confusing
+"works, but only from one exact address" symptom this fixes. Since
+`server.js` is regenerated from scratch by every `next build`, this has
+to be a post-build patch step (both `deploy.sh` and `.cpanel.yml` run
+it), not a one-time edit to a committed file.
 
 **After every run of `deploy.sh`, go to cPanel → Setup Node.js App →
 neca-app and click Stop, then Start** (not just Restart — Restart alone

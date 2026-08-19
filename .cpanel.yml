@@ -43,12 +43,22 @@ deployment:
     - source $NODEVENV_ACTIVATE
     - npm ci
     - RAYON_NUM_THREADS=1 NODE_OPTIONS="--max-old-space-size=512" npm run build
-    # output: "standalone" (next.config.ts) produces a self-contained
-    # server at .next/standalone/server.js, but per Next's own docs it
-    # does NOT include public/ or .next/static — those have to be copied
-    # in by hand. cPanel's "Application startup file" points directly at
-    # .next/standalone/server.js (see deploy/ssh/README.md's neighbour,
-    # the top-level README, for the full note on this).
+    # Next's own generated .next/standalone/server.js (freshly regenerated
+    # by every `next build`, so this has to be patched post-build, not
+    # edited once) contains `const hostname = process.env.HOSTNAME ||
+    # '0.0.0.0'` — see node_modules/next/dist/build/utils.js's SERVER_FILE
+    # template. Many shared hosts (this one included) export an ambient
+    # HOSTNAME shell var (e.g. the box's own name, "server224.web-hosting.com")
+    # that's inherited by whatever spawns the Node app (Passenger, in
+    # cPanel's case) — Next then binds *only* to that resolved address
+    # instead of all interfaces. Passenger/LiteSpeed proxy to the app over
+    # localhost/a private socket, so an app that isn't listening on
+    # 0.0.0.0 is unreachable from them even though it runs fine and
+    # returns real 200s when hit directly by the exact hostname — the
+    # confusing "works, but only from one exact address" symptom this
+    # fixes. Force it unconditionally so no ambient env var can narrow the
+    # bind again.
+    - /bin/sed -i "s/const hostname = process.env.HOSTNAME || '0.0.0.0'/const hostname = '0.0.0.0'/" .next/standalone/server.js
     - /bin/mkdir -p .next/standalone/.next
     - /bin/cp -R .next/static .next/standalone/.next/static
     - /bin/cp -R public .next/standalone/public

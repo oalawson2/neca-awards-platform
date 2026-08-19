@@ -8,16 +8,18 @@ import type { PlatformUser } from "@/types/domain";
  * secretariat_super_admin maps to role="secretariat" + isSuperAdmin=true,
  * same convention the UI already used before this was real data.
  *
- * "status" is always "active" here — the real schema has no "invited but
+ * status is never "invited" here — the real schema has no "invited but
  * not yet accepted" signal without an extra admin API call per user
  * (auth.users.email_confirmed_at, not exposed to the regular client), so
- * that distinction is dropped rather than faked.
+ * that distinction is dropped rather than faked. "deactivated" is real,
+ * though: profiles.deactivated_at (see lib/actions/users.ts's
+ * deactivateUser/reactivateUser).
  */
 export async function getStaffAndJurors(): Promise<PlatformUser[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, full_name, email, role")
+    .select("id, full_name, email, role, deactivated_at")
     .in("role", ["secretariat", "secretariat_super_admin", "jury"]);
   if (error || !data) return [];
 
@@ -26,7 +28,7 @@ export async function getStaffAndJurors(): Promise<PlatformUser[]> {
     name: p.full_name,
     email: p.email,
     role: p.role === "jury" ? "jury" : "secretariat",
-    status: "active",
+    status: p.deactivated_at ? "deactivated" : "active",
     isSuperAdmin: p.role === "secretariat_super_admin",
   }));
 }

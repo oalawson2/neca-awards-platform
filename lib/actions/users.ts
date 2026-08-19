@@ -14,7 +14,7 @@ export interface InviteResult {
 async function requireSecretariat(): Promise<InviteResult | null> {
   const user = await getCurrentUser();
   if (!user || (user.role !== "secretariat" && user.role !== "secretariat_super_admin")) {
-    return { success: false, error: "Only Secretariat can invite users." };
+    return { success: false, error: "Only Secretariat can manage users." };
   }
   return null;
 }
@@ -125,4 +125,95 @@ export async function resendInvite(userId: string): Promise<InviteResult> {
 /** Same as resendInvite, but void-returning so it can be bound directly to a <form action>. */
 export async function resendInviteFormAction(userId: string): Promise<void> {
   await resendInvite(userId);
+}
+
+/**
+ * Edits an existing Secretariat/jury account's name and role. Deliberately
+ * doesn't touch email (a Supabase Auth identity change, a bigger and
+ * riskier operation than "edit basic details" asked for) or
+ * secretariat_super_admin (a more sensitive elevated flag, not part of
+ * this UI). Uses the admin client for both writes since profiles_update_secretariat
+ * would cover the profiles row but auth.users' user_metadata.full_name
+ * (kept in sync so it doesn't drift from a stale value if this account is
+ * ever re-invited) needs the admin API either way.
+ */
+export async function editUser(userId: string, input: { name: string; role: "secretariat" | "jury" }): Promise<InviteResult> {
+  const denied = await requireSecretariat();
+  if (denied) return denied;
+
+  const name = input.name.trim();
+  if (!name) return { success: false, error: "Name is required." };
+
+  const admin = createAdminClient();
+  const { data: existing } = await admin.from("profiles").select("role").eq("id", userId).maybeSingle();
+  if (!existing) return { success: false, error: "User not found." };
+  // secretariat_super_admin isn't one of the two roles this form offers,
+  // so writing input.role verbatim would silently demote a super admin to
+  // a regular Secretariat account the moment anyone edited their name.
+  const role = existing.role === "secretariat_super_admin" ? "secretariat_super_admin" : input.role;
+
+  const { error } = await admin.from("profiles").update({ full_name: name, role }).eq("id", userId);
+  if (error) return { success: false, error: "Could not save changes." };
+
+  await admin.auth.admin.updateUserById(userId, { user_metadata: { full_name: name } });
+
+  const actor = await getCurrentUser();
+  await logAction(actor?.fullName ?? "Secretariat", "Updated user", name);
+  revalidatePath("/secretariat/users");
+  return { success: true };
+}
+
+/**
+ * Deactivation, not deletion (see PR discussion): juror_scores, audit_log,
+ * panel_memberships, interviews.requested_by and others all reference
+ * profiles by id, so a hard delete would either orphan historical records
+ * or fail outright on the FK. profiles.deactivated_at is the record of
+ * record; the auth-level ban (ban_duration: '876000h' — GoTrue's own
+ * documented pattern for an effectively-permanent ban, there's no literal
+ * "forever" value) additionally blocks this account from signing in again
+ * at all, belt-and-braces alongside deactivated_at being checked on every
+ * request by getCurrentUser()/proxy.ts. Refuses to let a Secretariat user
+ * deactivate their own account — the whole point of this screen is
+ * Secretariat managing *other* accounts, and self-deactivation has no real
+ * use case here beyond an admin accidentally locking themselves out.
+ */
+export async function deactivateUser(userId: string): Promise<InviteResult> {
+  const denied = await requireSecretariat();
+  if (denied) return denied;
+
+  const actor = await getCurrentUser();
+  if (actor?.id === userId) return { success: false, error: "You can't deactivate your own account." };
+
+  const admin = createAdminClient();
+  const { data: existing } = await admin.from("profiles").select("full_name").eq("id", userId).maybeSingle();
+  if (!existing) return { success: false, error: "User not found." };
+
+  const { error } = await admin.from("profiles").update({ deactivated_at: new Date().toISOString() }).eq("id", userId);
+  if (error) return { success: false, error: "Could not deactivate this account." };
+
+  await admin.auth.admin.updateUserById(userId, { ban_duration: "876000h" });
+
+  await logAction(actor?.fullName ?? "Secretariat", "Deactivated user", existing.full_name);
+  revalidatePath("/secretariat/users");
+  return { success: true };
+}
+
+/** Reverses deactivateUser: clears deactivated_at and lifts the auth-level ban. */
+export async function reactivateUser(userId: string): Promise<InviteResult> {
+  const denied = await requireSecretariat();
+  if (denied) return denied;
+
+  const admin = createAdminClient();
+  const { data: existing } = await admin.from("profiles").select("full_name").eq("id", userId).maybeSingle();
+  if (!existing) return { success: false, error: "User not found." };
+
+  const { error } = await admin.from("profiles").update({ deactivated_at: null }).eq("id", userId);
+  if (error) return { success: false, error: "Could not reactivate this account." };
+
+  await admin.auth.admin.updateUserById(userId, { ban_duration: "none" });
+
+  const actor = await getCurrentUser();
+  await logAction(actor?.fullName ?? "Secretariat", "Reactivated user", existing.full_name);
+  revalidatePath("/secretariat/users");
+  return { success: true };
 }

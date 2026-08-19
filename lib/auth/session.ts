@@ -17,7 +17,12 @@ export { portalPathForRole } from "@/lib/auth/portal-path";
  * A signed-in auth.users row with no matching profiles row (e.g. the
  * profiles insert failed mid-signup) is treated as signed-out rather than
  * crashing — there's no role to route on, so there's nothing this function
- * can meaningfully return.
+ * can meaningfully return. A deactivated account (profiles.deactivated_at
+ * set — see lib/actions/users.ts's deactivateUser) is treated the same
+ * way: this is what makes deactivation take effect immediately, on the
+ * very next request, rather than waiting on their Supabase Auth session to
+ * naturally expire — the admin-side auth ban (also set by deactivateUser)
+ * only blocks *future* sign-ins, not an already-issued session.
  */
 export async function getCurrentUser(): Promise<SessionUser | null> {
   const supabase = await createClient();
@@ -30,10 +35,10 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, full_name, email, role")
+    .select("id, full_name, email, role, deactivated_at")
     .eq("id", user.id)
     .maybeSingle();
-  if (!profile) return null;
+  if (!profile || profile.deactivated_at) return null;
 
   return {
     id: profile.id,

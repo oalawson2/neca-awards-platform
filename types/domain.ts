@@ -604,7 +604,7 @@ export type AuditLogEntry = {
   target: string;
 };
 
-export type PlatformUserStatus = "active" | "invited";
+export type PlatformUserStatus = "active" | "invited" | "deactivated";
 
 export interface PlatformUser {
   id: string;

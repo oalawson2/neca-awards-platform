@@ -4,6 +4,7 @@ import { resendInviteFormAction } from "@/lib/actions/users";
 import { Badge } from "@/components/ui/Badge";
 import { InviteUserModal } from "@/components/secretariat/InviteUserModal";
 import { ResendInviteButton } from "@/components/secretariat/ResendInviteButton";
+import { EditUserModal } from "@/components/secretariat/EditUserModal";
 
 export default async function UsersPage() {
   const [users, panelNames] = await Promise.all([getStaffAndJurors(), getPanelNamesByJuror()]);
@@ -41,8 +42,8 @@ export default async function UsersPage() {
                 </Badge>
               </div>
               <div className="text-text-muted">{u.role === "jury" ? panelFor(u.id) : "—"}</div>
-              <div className={u.status === "active" ? "text-success" : "text-warning"}>
-                ● {u.status === "active" ? "Active" : "Invited"}
+              <div className={u.status === "active" ? "text-success" : u.status === "deactivated" ? "text-error" : "text-warning"}>
+                ● {u.status === "active" ? "Active" : u.status === "deactivated" ? "Deactivated" : "Invited"}
               </div>
               <div>
                 {u.status === "invited" ? (
@@ -50,9 +51,7 @@ export default async function UsersPage() {
                     <ResendInviteButton />
                   </form>
                 ) : (
-                  <span className="text-xs text-[#AEB1BC]" title="Not implemented in this mock-data phase">
-                    Edit
-                  </span>
+                  <EditUserModal user={u} />
                 )}
               </div>
             </div>

@@ -74,8 +74,13 @@ export async function proxy(request: NextRequest) {
 
   let role: UserRole | null = null;
   if (user) {
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
-    role = profile?.role ?? null;
+    const { data: profile } = await supabase.from("profiles").select("role, deactivated_at").eq("id", user.id).maybeSingle();
+    // A deactivated account (lib/actions/users.ts's deactivateUser) is
+    // routed the same as "no role" below — signed out, redirected to
+    // /login — so revocation takes effect on the very next request rather
+    // than waiting for their session to expire or the admin-side auth ban
+    // (also set by deactivateUser) to matter.
+    role = profile && !profile.deactivated_at ? profile.role : null;
   }
 
   const { pathname } = request.nextUrl;

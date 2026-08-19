@@ -75,11 +75,28 @@ export function SignupForm() {
         className="mb-[22px]"
         checked={agreeToTerms}
         onChange={(e) => setAgreeToTerms(e.target.checked)}
-        label="I agree to the Data Privacy Statement and Terms of Participation."
+        label={
+          <>
+            I agree to the{" "}
+            <Link href="/terms#confidentiality-data-protection" target="_blank" className="text-info font-semibold">
+              Data Privacy Statement
+            </Link>{" "}
+            and{" "}
+            <Link href="/terms#part-two" target="_blank" className="text-info font-semibold">
+              Terms of Participation
+            </Link>
+            .
+          </>
+        }
       />
-      <Button type="submit" className="w-full" loading={isPending}>
+      <Button type="submit" className="w-full" loading={isPending} disabled={!agreeToTerms}>
         {isPending ? "Creating account…" : "Create account"}
       </Button>
+      {!agreeToTerms && (
+        <p className="text-xs text-text-muted text-center mt-2.5">
+          You must agree to the terms above before creating an account.
+        </p>
+      )}
       <div className="text-center text-[13px] text-text-muted mt-5">
         Already registered? <Link href="/login">Sign in</Link>
       </div>

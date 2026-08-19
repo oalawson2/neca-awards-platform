@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/lib/data/audit";
 import { isEmailSendFailure } from "@/lib/supabase/errors";
+import { TERMS_VERSION } from "@/lib/terms";
 import type { UserRole } from "@/types/auth";
 
 export interface AuthResult {
@@ -142,8 +143,24 @@ export async function signUpApplicant(input: SignUpInput): Promise<AuthResult> {
     return { success: false, error: "You must agree to the Data Privacy Statement and Terms of Participation." };
   }
 
+  // Recorded in auth.users.user_metadata (via signUp's options.data) rather
+  // than a profiles column — there isn't one for this yet. profiles has no
+  // terms-acceptance field, and organizations.eligibility_declarations is a
+  // different, later-in-the-flow agreement (Section A's legal/tax/sanction
+  // declarations), not this signup-time one, so it isn't a fit either. This
+  // still durably records the fact (queryable via the admin API or
+  // auth.users.raw_user_meta_data directly), it's just not joinable through
+  // the regular profiles reads the rest of the app uses. A dedicated
+  // profiles.terms_accepted_at (+ terms_version) column would be the
+  // cleaner permanent home if one gets added.
+  const termsAcceptedAt = new Date().toISOString();
+
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.signUp({ email, password: input.password });
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password: input.password,
+    options: { data: { terms_accepted_at: termsAcceptedAt, terms_version: TERMS_VERSION } },
+  });
   if (error) {
     return { success: false, error: error.message };
   }

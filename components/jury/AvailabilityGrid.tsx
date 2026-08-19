@@ -34,9 +34,14 @@ export function AvailabilityGrid({ panelName, slots }: { panelName: string | nul
                   {slot.durationMinutes} min · {slot.format === "physical" ? "In person" : "Virtual"}
                 </div>
               </div>
-              <span className={slot.interviewId ? "text-xs font-semibold text-success" : "text-xs text-text-muted"}>
-                {slot.interviewId ? "✓ Booked" : "Open"}
-              </span>
+              {slot.interviewId ? (
+                <span className="text-xs font-semibold text-success text-right">
+                  ✓ Booked
+                  {slot.bookedByOrganizationName && <div className="text-text-muted font-normal">{slot.bookedByOrganizationName}</div>}
+                </span>
+              ) : (
+                <span className="text-xs text-text-muted">Open</span>
+              )}
             </div>
           ))}
         </div>

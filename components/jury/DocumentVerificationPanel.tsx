@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/Badge";
 import { Spinner } from "@/components/ui/Button";
 import { DocumentPreview } from "@/components/ui/DocumentPreview";
 import { verifyDocumentCredible, flagDocument } from "@/lib/actions/stage2a";
-import { requestInterview } from "@/lib/actions/interviews";
 import { RED_FLAG_LABELS } from "@/types/domain";
 import type { DocumentVerification, RedFlag, RedFlagReason, RequiredDocument } from "@/types/domain";
 import type { DocumentWithVerification } from "@/lib/data/stage2a";
@@ -14,21 +13,17 @@ import type { DocumentWithVerification } from "@/lib/data/stage2a";
 const RED_FLAG_REASONS = Object.keys(RED_FLAG_LABELS) as RedFlagReason[];
 
 export function DocumentVerificationPanel({
-  applicationId,
   organizationName,
   documents,
   missingDocuments,
   jurorId,
-  jurorName,
   redFlagCount,
   interviewAlreadyRequested,
 }: {
-  applicationId: string;
   organizationName: string;
   documents: DocumentWithVerification[];
   missingDocuments: RequiredDocument[];
   jurorId: string;
-  jurorName: string;
   redFlagCount: number;
   interviewAlreadyRequested: boolean;
 }) {
@@ -36,21 +31,9 @@ export function DocumentVerificationPanel({
   const [activeId, setActiveId] = useState(documents[0]?.id);
   const [flagReason, setFlagReason] = useState<RedFlagReason>("undated");
   const [isPending, startTransition] = useTransition();
-  const [interviewRequested, setInterviewRequested] = useState(interviewAlreadyRequested);
-  const [interviewError, setInterviewError] = useState<string | null>(null);
 
   const active = items.find((d) => d.id === activeId) ?? items[0];
   const reviewedCount = items.filter((d) => d.myVerification).length;
-  const allReviewed = items.length > 0 && reviewedCount === items.length;
-
-  function handleRequestInterview() {
-    setInterviewError(null);
-    startTransition(async () => {
-      const result = await requestInterview(applicationId, jurorId, jurorName);
-      if (result.success) setInterviewRequested(true);
-      else setInterviewError(result.error ?? "Could not request interview.");
-    });
-  }
 
   function goNext() {
     const idx = items.findIndex((d) => d.id === active?.id);
@@ -114,22 +97,12 @@ export function DocumentVerificationPanel({
         </div>
         <div className="flex items-center gap-2.5">
           {redFlagCount >= 3 && <Badge tone="error">3+ RED FLAGS — SECRETARIAT REVIEW TRIGGERED</Badge>}
-          {interviewRequested ? (
+          {interviewAlreadyRequested ? (
             <span className="text-[13px] font-semibold text-success">✓ Interview requested</span>
-          ) : allReviewed ? (
-            <>
-              {interviewError && <span className="text-xs text-error">{interviewError}</span>}
-              <button
-                onClick={handleRequestInterview}
-                disabled={isPending}
-                className="bg-gold text-white rounded-[10px] px-4 py-2 text-[13px] font-semibold inline-flex items-center gap-2"
-              >
-                {isPending && <Spinner className="w-3.5 h-3.5" />}
-                Request Interview
-              </button>
-            </>
           ) : (
-            <span className="text-xs text-text-muted">Review every document to unlock interview requests</span>
+            <span className="text-xs text-text-muted">
+              Interview not yet requested — Secretariat requests interviews for shortlisted applicants
+            </span>
           )}
         </div>
       </div>

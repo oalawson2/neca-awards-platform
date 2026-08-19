@@ -19,16 +19,13 @@ export default async function JuryDocumentReviewPage({ params }: { params: Promi
     getRedFlagCount(applicationId),
     getInterviewSession(applicationId),
   ]);
-  const jurorName = user.fullName || user.email;
 
   return (
     <DocumentVerificationPanel
-      applicationId={applicationId}
       organizationName={application.organization.name}
       documents={documents}
       missingDocuments={missingDocuments}
       jurorId={user.id}
-      jurorName={jurorName}
       redFlagCount={redFlagCount}
       interviewAlreadyRequested={!!interviewSession}
     />

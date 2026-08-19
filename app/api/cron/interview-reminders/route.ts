@@ -14,7 +14,7 @@ function isAuthorized(request: NextRequest, secret: string): boolean {
  * Meant to be hit periodically by an external scheduler (see README —
  * cPanel Cron Jobs on this host). Re-scoped to InterviewSession (the
  * panel-based Stage 2b model) rather than the old single-juror
- * InterviewRequest — see lib/actions/interviews.ts's requestInterview.
+ * InterviewRequest — see lib/actions/interviews.ts's requestInterviewsForPanel.
  */
 async function runReminderSweep() {
   const [bookingCandidates, attendanceCandidates] = await Promise.all([

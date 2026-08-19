@@ -106,7 +106,7 @@ function ResponseControl({
       );
     case "frequency":
       return (
-        <div className="grid grid-cols-5 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
           {FREQUENCY_LABELS.map((label, idx) => (
             <ChoiceButton key={label} active={value === idx} onClick={() => onChange(idx)} disabled={readOnly}>
               {label}

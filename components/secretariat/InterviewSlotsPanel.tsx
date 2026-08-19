@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Input, Label, Select } from "@/components/ui/Field";
 import { Button, Spinner } from "@/components/ui/Button";
 import { createAvailabilitySlot, deleteAvailabilitySlot } from "@/lib/actions/interviewSlots";
+import { requestInterviewsForPanel } from "@/lib/actions/interviews";
 import type { AvailabilitySlot } from "@/types/domain";
 
 const DURATION_OPTIONS = [30, 45, 60, 90, 120];
@@ -31,6 +32,32 @@ export function InterviewSlotsPanel({ panelId, panelName, slots }: { panelId: st
   const [format, setFormat] = useState<"virtual" | "physical">("virtual");
   const [error, setError] = useState<string | null>(null);
   const [localSlots, setLocalSlots] = useState(slots);
+  const [isRequesting, startRequesting] = useTransition();
+  const [requestResult, setRequestResult] = useState<string | null>(null);
+  const [requestError, setRequestError] = useState<string | null>(null);
+
+  function requestInterviews() {
+    setRequestError(null);
+    setRequestResult(null);
+    startRequesting(async () => {
+      const result = await requestInterviewsForPanel(panelId);
+      if (!result.success) {
+        setRequestError(result.error ?? "Could not request interviews.");
+        return;
+      }
+      const { requestedCount = 0, alreadyRequestedCount = 0 } = result;
+      if (requestedCount === 0 && alreadyRequestedCount === 0) {
+        setRequestResult("No shortlisted applicants in this panel yet.");
+      } else if (requestedCount === 0) {
+        setRequestResult(`All ${alreadyRequestedCount} shortlisted applicant(s) already have an interview requested.`);
+      } else {
+        setRequestResult(
+          `Requested interviews for ${requestedCount} applicant(s)` +
+            (alreadyRequestedCount > 0 ? ` (${alreadyRequestedCount} already had one).` : ".")
+        );
+      }
+    });
+  }
 
   function addSlot() {
     if (!when) return;
@@ -45,7 +72,20 @@ export function InterviewSlotsPanel({ panelId, panelName, slots }: { panelId: st
       // Server data will catch up on next navigation/refresh — this is
       // just so the just-added slot doesn't appear to vanish immediately.
       setLocalSlots((prev) =>
-        [...prev, { id: `pending-${Date.now()}`, panelId, startsAt: localInputToUtcIso(when), durationMinutes: duration, format, interviewId: null, bookedAt: null }].sort(
+        [
+          ...prev,
+          {
+            id: `pending-${Date.now()}`,
+            panelId,
+            startsAt: localInputToUtcIso(when),
+            durationMinutes: duration,
+            format,
+            interviewId: null,
+            bookedAt: null,
+            bookedByApplicationId: null,
+            bookedByOrganizationName: null,
+          },
+        ].sort(
           (a, b) => a.startsAt.localeCompare(b.startsAt)
         )
       );
@@ -66,7 +106,14 @@ export function InterviewSlotsPanel({ panelId, panelName, slots }: { panelId: st
 
   return (
     <div className="border border-border rounded-2xl p-5">
-      <div className="font-bold text-sm text-navy-dark mb-3.5">{panelName}</div>
+      <div className="flex items-center justify-between gap-2 mb-3.5">
+        <div className="font-bold text-sm text-navy-dark">{panelName}</div>
+        <Button size="sm" variant="secondary" disabled={isRequesting} loading={isRequesting} onClick={requestInterviews}>
+          Request Interviews
+        </Button>
+      </div>
+      {requestResult && <div className="text-xs text-success mb-3">{requestResult}</div>}
+      {requestError && <div className="text-xs text-error mb-3">{requestError}</div>}
 
       <div className="flex flex-col gap-2.5 mb-4">
         <div>
@@ -106,7 +153,10 @@ export function InterviewSlotsPanel({ panelId, panelName, slots }: { panelId: st
                 </div>
               </div>
               {slot.interviewId ? (
-                <span className="text-xs font-semibold text-success flex-shrink-0">Booked</span>
+                <span className="text-xs font-semibold text-success flex-shrink-0 text-right">
+                  ✓ Booked
+                  {slot.bookedByOrganizationName && <div className="text-text-muted font-normal">{slot.bookedByOrganizationName}</div>}
+                </span>
               ) : (
                 <button
                   onClick={() => removeSlot(slot.id)}

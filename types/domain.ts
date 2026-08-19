@@ -484,6 +484,9 @@ export interface AvailabilitySlot {
   format: "virtual" | "physical";
   interviewId: string | null;
   bookedAt: string | null;
+  /** Which applicant booked this slot, if any — null for an open slot or when the booking's application/org lookup fails. */
+  bookedByOrganizationName: string | null;
+  bookedByApplicationId: string | null;
 }
 
 // ===========================================================================

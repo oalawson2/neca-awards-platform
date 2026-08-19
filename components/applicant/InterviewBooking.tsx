@@ -37,8 +37,8 @@ export function InterviewBooking({
       <div className="max-w-2xl mx-auto px-6 py-14 text-center">
         <h1 className="font-heading font-extrabold text-xl text-navy">No interview requested yet</h1>
         <p className="text-sm text-text-muted mt-2">
-          Your sector&rsquo;s jury panel hasn&rsquo;t requested an interview with you yet. You&rsquo;ll receive an
-          email once one is scheduled.
+          The Secretariat hasn&rsquo;t requested an interview with your sector&rsquo;s jury panel for you yet.
+          You&rsquo;ll receive an email once one is scheduled.
         </p>
       </div>
     );
@@ -53,7 +53,7 @@ export function InterviewBooking({
           {formatDate(session.scheduledAt)} — {session.format === "virtual" ? "virtual" : "in person"}
         </p>
         <p className="text-xs text-text-muted mt-4">
-          Your panel will be in touch with the meeting details ahead of time.
+          The Secretariat will be in touch with the meeting details ahead of time.
         </p>
       </div>
     );
@@ -87,8 +87,9 @@ export function InterviewBooking({
       <div className="max-w-2xl mx-auto px-6 py-14 text-center">
         <h1 className="font-heading font-extrabold text-xl text-navy">Interview slots not yet available</h1>
         <p className="text-sm text-text-muted mt-2">
-          Your sector&rsquo;s jury panel has requested an interview with you. The Secretariat hasn&rsquo;t published
-          available times yet — check back soon, or you&rsquo;ll get an email once slots are ready to book.
+          The Secretariat has requested an interview with your sector&rsquo;s jury panel for you, but hasn&rsquo;t
+          published available times yet — check back soon, or you&rsquo;ll get an email once slots are ready to
+          book.
         </p>
       </div>
     );

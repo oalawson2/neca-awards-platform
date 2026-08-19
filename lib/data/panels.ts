@@ -56,6 +56,40 @@ export async function getPanelsWithDetails(): Promise<PanelWithDetails[]> {
   });
 }
 
+export interface ShortlistedApplicationForPanel {
+  id: string;
+  organizationName: string;
+}
+
+/**
+ * Shortlisted applications whose organization's sector falls under this
+ * panel's assigned sector clusters — same panel<->application mapping
+ * getPanelsWithDetails uses for its count above, but returning the actual
+ * rows so the Secretariat's bulk "Request Interviews" action has
+ * something to iterate.
+ */
+export async function getShortlistedApplicationsForPanel(panelId: string): Promise<ShortlistedApplicationForPanel[]> {
+  const supabase = await createClient();
+  const [{ data: clusters }, { data: applications }, { data: sectors }] = await Promise.all([
+    supabase.from("panel_sector_clusters").select("sector_category_id").eq("panel_id", panelId),
+    supabase.from("applications").select("id, organizations(name, sector_id)").eq("status", "shortlisted"),
+    supabase.from("sectors").select("id, category_id"),
+  ]);
+  const sectorCategoryIds = new Set((clusters ?? []).map((c) => c.sector_category_id));
+  const categoryIdBySectorId = new Map((sectors ?? []).map((s) => [s.id, s.category_id]));
+
+  const result: ShortlistedApplicationForPanel[] = [];
+  for (const a of applications ?? []) {
+    const org = Array.isArray(a.organizations) ? a.organizations[0] : a.organizations;
+    if (!org) continue;
+    const categoryId = categoryIdBySectorId.get(org.sector_id);
+    if (categoryId && sectorCategoryIds.has(categoryId)) {
+      result.push({ id: a.id, organizationName: org.name });
+    }
+  }
+  return result;
+}
+
 export async function getJurorConflicts(): Promise<JurorConflict[]> {
   const supabase = await createClient();
   const { data } = await supabase

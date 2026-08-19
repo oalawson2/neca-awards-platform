@@ -2,9 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/session";
 import { logAction } from "@/lib/data/audit";
 import { sendEmail } from "@/lib/email/send";
 import { getStage2aReviewerIds } from "@/lib/data/interviews";
+import { getShortlistedApplicationsForPanel } from "@/lib/data/panels";
 import { itemById } from "@/lib/mock/framework";
 import type { PillarCode } from "@/types/domain";
 
@@ -15,63 +17,94 @@ async function orgForApplication(supabase: Awaited<ReturnType<typeof createClien
   return org;
 }
 
+export interface BulkInterviewRequestResult {
+  success: boolean;
+  error?: string;
+  requestedCount?: number;
+  alreadyRequestedCount?: number;
+}
+
 /**
- * Juror-initiated, per-applicant, gated on this juror having finished
- * their own Stage 2a document review for this applicant (doc section
- * 11.3). Assigns the requesting juror's whole panel as participants,
- * recording did_stage2a_review per juror — the "at least one non-2a-
- * reviewer" rule (doc: "to reduce single-reviewer bias") is then an app-
- * level check at interview time, same as the mock version; the schema
- * stores the fact but doesn't hard-enforce the rule itself.
+ * Secretariat-initiated, per-panel, bulk — supersedes the old juror-
+ * initiated, per-applicant requestInterview. That version gated on the
+ * requesting juror having finished their own Stage 2a document review
+ * (doc section 11.3); there's no equivalent gate here since Secretariat
+ * isn't the one reviewing documents. did_stage2a_review is still recorded
+ * per juror on each interview_participants row (via getStage2aReviewerIds)
+ * so the "at least one non-2a-reviewer on the interview panel" rule (doc:
+ * "to reduce single-reviewer bias") still has the data it needs at
+ * interview time — that rule was always an app-level check on top of the
+ * schema, not something the schema enforces itself, and that's unchanged.
+ *
+ * Idempotent per applicant: one with an interviews row already (an
+ * earlier click, or a leftover from the old flow) is skipped, not
+ * duplicated — safe to click again as more applicants get shortlisted.
  */
-export async function requestInterview(applicationId: string, requestingJurorId: string, jurorName: string) {
+export async function requestInterviewsForPanel(panelId: string): Promise<BulkInterviewRequestResult> {
+  const user = await getCurrentUser();
+  if (!user || (user.role !== "secretariat" && user.role !== "secretariat_super_admin")) {
+    return { success: false, error: "Only Secretariat can request interviews." };
+  }
+
   const supabase = await createClient();
-
-  const { data: existing } = await supabase.from("interviews").select("id").eq("application_id", applicationId).maybeSingle();
-  if (existing) return { success: false, error: "An interview has already been requested for this applicant." };
-
-  const { data: myPanel } = await supabase.from("panel_memberships").select("panel_id").eq("juror_id", requestingJurorId).maybeSingle();
-  if (!myPanel) return { success: false, error: "You aren't assigned to a panel." };
-
-  const { data: panelMembers } = await supabase.from("panel_memberships").select("juror_id").eq("panel_id", myPanel.panel_id);
+  const [{ data: panelMembers }, candidates] = await Promise.all([
+    supabase.from("panel_memberships").select("juror_id").eq("panel_id", panelId),
+    getShortlistedApplicationsForPanel(panelId),
+  ]);
   const panelJurorIds = (panelMembers ?? []).map((m) => m.juror_id);
+  if (candidates.length === 0) return { success: true, requestedCount: 0, alreadyRequestedCount: 0 };
 
-  const stage2aReviewerIds = new Set(await getStage2aReviewerIds(applicationId));
-
-  const { data: interview, error: interviewError } = await supabase
+  const { data: existingInterviews } = await supabase
     .from("interviews")
-    .insert({ application_id: applicationId, panel_id: myPanel.panel_id, requested_by: requestingJurorId, status: "requested" })
-    .select("id")
-    .single();
-  if (interviewError || !interview) return { success: false, error: "Could not create the interview." };
+    .select("application_id")
+    .in("application_id", candidates.map((c) => c.id));
+  const alreadyRequested = new Set((existingInterviews ?? []).map((i) => i.application_id));
+  const toRequest = candidates.filter((c) => !alreadyRequested.has(c.id));
 
-  const participantRows = panelJurorIds.map((jurorId) => ({
-    interview_id: interview.id,
-    juror_id: jurorId,
-    did_stage2a_review: stage2aReviewerIds.has(jurorId),
-  }));
-  const { error: participantsError } = await supabase.from("interview_participants").insert(participantRows);
-  if (participantsError) {
-    await supabase.from("interviews").delete().eq("id", interview.id);
-    return { success: false, error: "Could not assign the panel to this interview." };
+  let requestedCount = 0;
+  for (const candidate of toRequest) {
+    const stage2aReviewerIds = new Set(await getStage2aReviewerIds(candidate.id));
+
+    const { data: interview, error: interviewError } = await supabase
+      .from("interviews")
+      .insert({ application_id: candidate.id, panel_id: panelId, requested_by: user.id, status: "requested" })
+      .select("id")
+      .single();
+    if (interviewError || !interview) continue;
+
+    if (panelJurorIds.length > 0) {
+      const { error: participantsError } = await supabase.from("interview_participants").insert(
+        panelJurorIds.map((jurorId) => ({
+          interview_id: interview.id,
+          juror_id: jurorId,
+          did_stage2a_review: stage2aReviewerIds.has(jurorId),
+        }))
+      );
+      if (participantsError) {
+        await supabase.from("interviews").delete().eq("id", interview.id);
+        continue;
+      }
+    }
+
+    const org = await orgForApplication(supabase, candidate.id);
+    if (org) {
+      await sendEmail({
+        to: org.contact_email,
+        subject: "You're invited to book your NECA Excellence Awards panel interview",
+        template: "interview-invite",
+        context: { organizationName: org.name, applicationId: candidate.id },
+      });
+    }
+    await supabase.from("interviews").update({ initial_email_sent_at: new Date().toISOString() }).eq("id", interview.id);
+    requestedCount++;
   }
 
-  const org = await orgForApplication(supabase, applicationId);
-  if (org) {
-    await sendEmail({
-      to: org.contact_email,
-      subject: "You're invited to book your NECA Excellence Awards panel interview",
-      template: "interview-invite",
-      context: { organizationName: org.name, applicationId },
-    });
+  if (requestedCount > 0) {
+    await logAction(user.fullName || user.email, `Requested interviews for ${requestedCount} shortlisted applicant(s), panel`, panelId);
   }
-  await supabase.from("interviews").update({ initial_email_sent_at: new Date().toISOString() }).eq("id", interview.id);
-
-  await logAction(jurorName, "Requested interview for", org?.name ?? applicationId);
-  revalidatePath("/jury/documents/" + applicationId);
+  revalidatePath("/secretariat/interviews");
   revalidatePath("/jury/availability");
-  revalidatePath("/applicant/interview");
-  return { success: true };
+  return { success: true, requestedCount, alreadyRequestedCount: candidates.length - requestedCount };
 }
 
 export async function markInterviewCompleted(applicationId: string) {

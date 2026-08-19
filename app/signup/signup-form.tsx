@@ -78,11 +78,16 @@ export function SignupForm() {
         label={
           <>
             I agree to the{" "}
-            <Link href="/terms#confidentiality-data-protection" target="_blank" className="text-info font-semibold">
+            <a
+              href="https://necaexcellenceawards.com/privacy-policy-2/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-info font-semibold"
+            >
               Data Privacy Statement
-            </Link>{" "}
+            </a>{" "}
             and{" "}
-            <Link href="/terms#part-two" target="_blank" className="text-info font-semibold">
+            <Link href="/terms" target="_blank" rel="noopener noreferrer" className="text-info font-semibold">
               Terms of Participation
             </Link>
             .

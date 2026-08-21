@@ -8,6 +8,21 @@ const nextConfig: NextConfig = {
   // build output is assembled into the deploy path.
   output: "standalone",
 
+  // Defaults to ".next", overridable via NEXT_DIST_DIR for deploy.sh's
+  // benefit only — local dev/build are unaffected. `next build`'s
+  // cleanDistDir defaults to true (wipes distDir at the *start* of every
+  // build, before anything is rebuilt — see node_modules/next/dist/docs/
+  // .../upgrading/version-11.md), which means building straight into the
+  // live ".next" would delete the currently-running standalone server
+  // the instant a new build starts, minutes before a replacement exists —
+  // any crash or OOM in between leaves the site broken publicly for as
+  // long as troubleshooting takes. deploy.sh instead builds into
+  // ".next-build" (untouched by cleanDistDir, since that's a different
+  // directory than the live one) and only swaps the result into
+  // ".next/standalone" — a near-instant rename — after confirming the
+  // new build actually boots and serves. See README's Deployment section.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
+
   experimental: {
     // Server Actions default to a 1MB request body cap. lib/actions/
     // documents.ts's uploadDocument accepts raw uploads (pre-compression)

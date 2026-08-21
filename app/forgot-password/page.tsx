@@ -8,7 +8,9 @@ export default function ForgotPasswordPage() {
         className="hidden lg:flex w-[45%] flex-col justify-between p-13 flex-shrink-0"
         style={{ background: "linear-gradient(160deg,#251C5B,#1A1442)" }}
       >
-        <Image src="/neca-logo.png" alt="" width={140} height={36} className="h-9 w-auto brightness-0 invert" />
+        {/* self-start: without it, this flex-col parent's default align-items:stretch
+            overrides w-auto and squashes the logo to the panel's full width. */}
+        <Image src="/neca-logo.png" alt="" width={140} height={36} className="h-9 w-auto self-start brightness-0 invert" />
         <div>
           <div className="font-heading font-extrabold text-3xl text-white leading-tight">
             Employers&rsquo; Excellence Awards

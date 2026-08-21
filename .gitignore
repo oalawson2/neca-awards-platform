@@ -15,6 +15,7 @@
 
 # next.js
 /.next/
+/.next-build/
 /out/
 
 # production
@@ -44,3 +45,9 @@ next-env.d.ts
 # SSH deploy keypair — never commit private keys. See deploy/ssh/README.md.
 deploy/ssh/*
 !deploy/ssh/README.md
+
+# Maintenance-mode flag file and deploy backups — server-side toggles/state,
+# never meant to be committed. See deploy/htaccess/maintenance-block.conf
+# and README's Deployment section.
+/MAINTENANCE_MODE
+/.next/standalone.bak

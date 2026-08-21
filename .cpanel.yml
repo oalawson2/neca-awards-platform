@@ -37,6 +37,17 @@
 # the app root before `npm run build` runs here, or NEXT_PUBLIC_* vars
 # compile in as undefined (cPanel's env var UI doesn't reach this deploy
 # task's shell) — see README's "Deployment" section for the full story.
+#
+# WARNING — unlike deploy.sh (the actually-active path, see README), this
+# builds straight into the live .next, not an isolated .next-build with
+# an atomic swap at the end. next build's cleanDistDir default (true)
+# wipes .next the moment the build *starts*, deleting the running
+# .next/standalone/server.js long before a replacement exists — any
+# crash or OOM partway through (this host is memory-constrained enough
+# for that to be a real risk) leaves the live site broken until the next
+# successful build. If this path is ever revived instead of deploy.sh,
+# port deploy.sh's NEXT_DIST_DIR + smoke-test + rename-swap approach over
+# first.
 deployment:
   tasks:
     - export NODEVENV_ACTIVATE=/home/necasmwo/nodevenv/neca-app/24/bin/activate

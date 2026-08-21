@@ -114,14 +114,44 @@ and run:
 ```
 
 This pulls the latest commit, activates the Node virtual environment,
-installs dependencies, builds (with the single-thread workaround this host
-requires), patches the freshly-built `.next/standalone/server.js` to bind
-`0.0.0.0` unconditionally (see below), and stages `public/` and
-`.next/static/` into `.next/standalone/` — Next's `output: "standalone"`
-build doesn't include either by default, and missing this step is what
-used to produce unhelpful 500s on static assets that never showed up in
-the app's own logs. The script stops immediately on any failure (`set -e`)
-rather than leaving a partial deploy that looks like it succeeded.
+installs dependencies, and **builds into a separate `.next-build`
+directory — never the live `.next/standalone` a real applicant's request
+might be hitting mid-deploy.** Next's own `cleanDistDir` default (`true`)
+wipes whatever directory a build targets *the moment the build starts*,
+long before a replacement exists (see `next.config.ts`'s `distDir`
+comment) — so building straight into the live directory, as earlier
+versions of this script did, would delete the running server the instant
+`next build` starts, and any crash or OOM in between (this host is
+memory-constrained enough that this has happened) left the site broken
+for however long troubleshooting took. Now the live site keeps serving
+the previous, working build completely undisturbed through the entire
+build. Once the build finishes, `deploy.sh`:
+
+1. patches the new `.next-build/standalone/server.js` to bind `0.0.0.0`
+   unconditionally (see below),
+2. stages `public/` and `.next-build/static/` into it — Next's
+   `output: "standalone"` build doesn't include either by default,
+3. **smoke-tests it** — boots that new `server.js` on a scratch local
+   port, outside Passenger, and confirms `/` and `/login` both return
+   real responses before touching anything live. A build finishing
+   without error isn't the same as the server actually being able to
+   start and serve — that gap is exactly what the `HOSTNAME` bind bug
+   below looked like from the outside: build succeeded, deploy
+   "succeeded," production was unreachable. If the smoke test fails, the
+   script exits here — the live site is untouched, still on the previous
+   build, and `.next-build/` is left in place for inspection,
+4. only then **swaps** the new build into place: the old
+   `.next/standalone` is renamed to `.next/standalone.bak` (one rollback
+   generation kept; roll back with
+   `mv .next/standalone.bak .next/standalone`) and the new,
+   already-verified one is renamed into `.next/standalone`. A rename on
+   the same filesystem is effectively instant — this is the only moment
+   the live path is touched at all.
+
+The script stops immediately on any failure (`set -e`) — a partial
+deploy never silently looks like a successful one, and per the above,
+failing anywhere through the smoke test leaves the live site completely
+untouched.
 
 **Why the server.js patch is needed:** Next's generated `server.js`
 contains `const hostname = process.env.HOSTNAME || '0.0.0.0'`. This host
@@ -150,6 +180,75 @@ the actual server; `next start` is not used in production.
 `.cpanel.yml` documents the equivalent steps for cPanel's Git Version
 Control feature but isn't the active deploy path on this host — `deploy.sh`
 is. See `deploy/ssh/README.md` for the SSH deploy key setup.
+
+### Maintenance mode + preview bypass
+
+Real applicants should only ever see the working site or a calm "we'll
+be back shortly" page — never a build in progress or a broken deploy.
+The rearchitected `deploy.sh` above already keeps the live site working
+throughout a normal build (see above), but maintenance mode exists as an
+explicit, deliberate safety net around the moments that still touch the
+live path: the atomic swap and the cPanel Stop/Start.
+
+**One-time setup:** paste the block in
+`deploy/htaccess/maintenance-block.conf` into the live `.htaccess`
+(`/home/necasmwo/neca-app/.htaccess`) by hand, at the very top, above
+cPanel's own Passenger directives — that file is cPanel-managed
+(regenerated whenever the Node App's settings change in the cPanel UI),
+so it's kept as a reference here rather than deployed automatically.
+Replace `REPLACE_WITH_SECRET` (both occurrences) with a real generated
+secret (`python3 -c "import secrets; print(secrets.token_urlsafe(24))"`)
+before saving, and re-check the live file after any future change to the
+Node App's settings in case cPanel's regeneration ever clobbers more
+than its own managed block.
+
+This works by intercepting requests in `.htaccess` via `mod_rewrite`
+*before* Passenger ever sees them — the same technique Phusion Passenger
+itself documents for serving a maintenance page while the underlying app
+is down, not a hack specific to this host. It was verified against a
+real Apache + `mod_rewrite` instance (normal traffic passing through
+untouched; every path blocked with a real 503 once the flag file exists;
+the correct secret reaching the app and setting a cookie; the cookie
+alone continuing to bypass on later requests; a wrong secret or cookie
+still blocked; the maintenance page itself always loading directly with
+no redirect loop; traffic resuming immediately once the flag is
+removed) — see the comments in `deploy/htaccess/maintenance-block.conf`
+for the two real bugs that testing caught and fixed. It has **not** been
+verified against this host's actual LiteSpeed + Passenger stack directly
+(this app has been bitten by LiteSpeed/Passenger-layer surprises before)
+— do one careful live check after pasting it in, per the checklist below.
+
+**Turn maintenance ON/OFF**, from the app root
+(`/home/necasmwo/neca-app`):
+
+```bash
+touch MAINTENANCE_MODE   # ON  — every visitor gets the maintenance page
+rm MAINTENANCE_MODE      # OFF — normal traffic resumes immediately
+```
+
+No Apache/Passenger restart needed either way — `mod_rewrite` checks for
+the file fresh on every request.
+
+**Preview bypass**, while maintenance is ON: visit
+`https://apply.necaexcellenceawards.com/?preview=<the secret>` once — it
+sets a cookie (~5.6 days, the default in the tested Apache build; revisit
+the link if it ever expires mid-use) so normal browsing and clicking
+through the app afterward doesn't need the query param on every request.
+This goes through the real public domain — LiteSpeed, Passenger, all of
+it — deliberately, not around it: hitting the app directly on its own
+port would miss exactly the class of routing-layer bug this app has hit
+before.
+
+**Standard deploy checklist:**
+
+```bash
+touch MAINTENANCE_MODE                      # 1. shield real applicants
+./deploy.sh                                 # 2. build, smoke-test, swap
+#    cPanel -> Setup Node.js App -> neca-app -> Stop, then Start   # 3.
+#    visit https://apply.necaexcellenceawards.com/?preview=<secret>
+#    and click through the real deploy on the real domain           # 4.
+rm MAINTENANCE_MODE                         # 5. once satisfied, reopen
+```
 
 ## Scheduled job: interview reminders
 

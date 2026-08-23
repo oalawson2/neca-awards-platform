@@ -129,17 +129,30 @@ build. Once the build finishes, `deploy.sh`:
 
 1. patches the new `.next-build/standalone/server.js` to bind `0.0.0.0`
    unconditionally (see below),
-2. stages `public/` and `.next-build/static/` into it — Next's
-   `output: "standalone"` build doesn't include either by default,
+2. stages `public/` and `.next-build/static/` into it, under a
+   `standalone/.next-build/static` path that **must** match the distDir
+   name from step 1 above — Next's `output: "standalone"` build doesn't
+   include either by default, and `server.js` has that distDir name baked
+   into its own compiled config at build time, so it looks for its static
+   files (and its own server-side chunks, which Next's build already
+   nests the same way) relative to whatever `NEXT_DIST_DIR` said, not a
+   hardcoded `.next`. Getting this wrong doesn't 500 — pages still render,
+   since the HTML only *references* `/_next/static/...` URLs rather than
+   needing them to exist to be generated — every one of those requests
+   just 404s once a real browser tries to load the CSS/JS, exactly the
+   failure mode step 3's asset check below exists to catch,
 3. **smoke-tests it** — boots that new `server.js` on a scratch local
    port, outside Passenger, and confirms `/` and `/login` both return
-   real responses before touching anything live. A build finishing
-   without error isn't the same as the server actually being able to
-   start and serve — that gap is exactly what the `HOSTNAME` bind bug
-   below looked like from the outside: build succeeded, deploy
-   "succeeded," production was unreachable. If the smoke test fails, the
-   script exits here — the live site is untouched, still on the previous
-   build, and `.next-build/` is left in place for inspection,
+   real responses *and* that a real static asset URL pulled out of the
+   rendered HTML actually loads — not just the page shell. A build
+   finishing without error isn't the same as the server actually being
+   able to start and serve everything the page needs — that gap is
+   exactly what the `HOSTNAME` bind bug below (and, separately, the
+   distDir/staging-path mismatch in step 2) looked like from the outside:
+   build succeeded, deploy "succeeded," something in production was still
+   broken. If the smoke test fails, the script exits here — the live site
+   is untouched, still on the previous build, and `.next-build/` is left
+   in place for inspection,
 4. only then **swaps** the new build into place: the old
    `.next/standalone` is renamed to `.next/standalone.bak` (one rollback
    generation kept; roll back with

@@ -108,10 +108,21 @@ echo "==> [6/9] Forcing the new standalone server to bind 0.0.0.0..."
 sed -i "s/const hostname = process.env.HOSTNAME || '0.0.0.0'/const hostname = '0.0.0.0'/" "$BUILD_DIST_DIR/standalone/server.js"
 
 echo "==> [7/9] Staging public/ and $BUILD_DIST_DIR/static into the new standalone build..."
-# Next's standalone build doesn't include either by default.
-mkdir -p "$BUILD_DIST_DIR/standalone/.next"
+# Next's standalone build doesn't include either by default. The static
+# files MUST land under standalone/$BUILD_DIST_DIR/static, not a
+# hardcoded standalone/.next/static: server.js has its distDir baked into
+# its own compiled config as whatever NEXT_DIST_DIR was at build time
+# (".next-build" here, not ".next"), and Next's own standalone assembly
+# already nests the server-side chunks the same way (standalone/
+# .next-build/server/...) — confirmed by inspecting a real build. Get
+# this wrong and pages still render (the HTML doesn't need the asset
+# files to exist), so curl-ing `/` alone won't catch it — every
+# /_next/static/* request 404s once a real browser tries to load CSS/JS,
+# which is exactly how this was first found. The smoke test below fetches
+# a real static asset for precisely this reason.
+mkdir -p "$BUILD_DIST_DIR/standalone/$BUILD_DIST_DIR"
 cp -R public "$BUILD_DIST_DIR/standalone/"
-cp -R "$BUILD_DIST_DIR/static" "$BUILD_DIST_DIR/standalone/.next/"
+cp -R "$BUILD_DIST_DIR/static" "$BUILD_DIST_DIR/standalone/$BUILD_DIST_DIR/"
 
 echo "==> [8/9] Smoke-testing the new build before it ever touches the live site..."
 # Boots the freshly-built server.js standalone (outside Passenger, on a
@@ -152,11 +163,31 @@ cleanup_smoke_test() {
 trap cleanup_smoke_test EXIT
 
 SMOKE_OK=1
+SMOKE_FAIL_REASON=""
 for i in $(seq 1 15); do
-  if curl -sf -o /dev/null "http://127.0.0.1:$SMOKE_TEST_PORT/" && curl -sf -o /dev/null "http://127.0.0.1:$SMOKE_TEST_PORT/login"; then
+  HOME_HTML="$(curl -sf "http://127.0.0.1:$SMOKE_TEST_PORT/")" || { sleep 1; continue; }
+  if ! curl -sf -o /dev/null "http://127.0.0.1:$SMOKE_TEST_PORT/login"; then
+    sleep 1
+    continue
+  fi
+  # A page returning 200 doesn't mean its assets do — the HTML just
+  # *references* /_next/static/... URLs, it doesn't require them to
+  # exist. Pull a real one out of the rendered HTML and fetch it too,
+  # the same way a browser actually would; this is what catches a
+  # distDir/staging-path mismatch between the compiled server and where
+  # deploy.sh put the static files; see step 7's comment for the exact
+  # bug this once was.
+  ASSET_PATH="$(echo "$HOME_HTML" | grep -oE '/_next/static/[^"'"'"']+\.(js|css)' | head -1)"
+  if [ -z "$ASSET_PATH" ]; then
+    SMOKE_FAIL_REASON="no /_next/static/*.js|css reference found in / — can't verify asset serving"
+    sleep 1
+    continue
+  fi
+  if curl -sf -o /dev/null "http://127.0.0.1:$SMOKE_TEST_PORT$ASSET_PATH"; then
     SMOKE_OK=0
     break
   fi
+  SMOKE_FAIL_REASON="static asset 404: $ASSET_PATH"
   sleep 1
 done
 
@@ -164,7 +195,8 @@ cleanup_smoke_test
 trap - EXIT
 
 if [ "$SMOKE_OK" -ne 0 ]; then
-  echo "ERROR: the new build did not come up cleanly on / and /login within 15s."
+  echo "ERROR: the new build did not come up cleanly within 15s (/, /login, and a"
+  echo "  real static asset all need to serve). ${SMOKE_FAIL_REASON:-no response at all}."
   echo "  Live site is untouched — still serving the previous build. Log:"
   echo "  ---------------------------------------------------------------"
   cat /tmp/neca-smoke-test.log || true
@@ -173,9 +205,14 @@ if [ "$SMOKE_OK" -ne 0 ]; then
   echo "  in place for inspection; it'll be overwritten by the next run."
   exit 1
 fi
-echo "    Smoke test passed: / and /login both served real responses."
+echo "    Smoke test passed: / and /login served real responses, and a real static asset ($ASSET_PATH) loaded."
 
 echo "==> [9/9] Swapping the new build into place (near-instant)..."
+# mkdir first: on a first-ever run of this build process .next/ (the
+# live path's parent) may not exist yet at all, since a distDir-overridden
+# build never creates it — `mv` needs the destination's parent directory
+# to already exist.
+mkdir -p .next
 rm -rf .next/standalone.bak
 if [ -d .next/standalone ]; then
   mv .next/standalone .next/standalone.bak

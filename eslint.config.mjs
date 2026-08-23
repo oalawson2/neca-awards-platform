@@ -12,6 +12,13 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // deploy.sh's isolated build directory (see next.config.ts's distDir
+    // override) — same reason ".next/**" is ignored above. A leftover
+    // .next-build/ from an interrupted or failed deploy.sh run (it's
+    // deliberately left in place on smoke-test failure, for inspection)
+    // would otherwise flood `npm run lint` with thousands of errors from
+    // compiled output.
+    ".next-build/**",
   ]),
 ]);
 

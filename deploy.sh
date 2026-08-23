@@ -42,6 +42,24 @@ cd "$APP_ROOT"
 echo "==> [1/9] Pulling latest from git..."
 git pull
 
+# Re-exec ourselves so the rest of THIS run reads the just-pulled version of
+# this very file, not whatever bash already had buffered from before `git
+# pull` ran. Without this, git pull updates deploy.sh on disk, but the
+# already-running interpreter keeps executing the OLD content for the
+# remainder of this same invocation — bash opened this file once at
+# startup, and git's checkout replaces the file (new inode) rather than
+# editing it in place, so the running process's own read of it is
+# unaffected by the pull it just did. Confirmed via direct reproduction:
+# running an old deploy.sh whose own git pull fetched a newer one still
+# executed the OLD staging/smoke-test logic for the rest of that run, even
+# though the file on disk was, by then, already the new version — this is
+# what actually caused the static-asset-404 fix to appear to not be
+# "really" deployed even though the fix commit had genuinely been pulled.
+# DEPLOY_SH_REEXECED guards against looping if re-exec somehow ran twice.
+if [ -z "${DEPLOY_SH_REEXECED:-}" ]; then
+  exec env DEPLOY_SH_REEXECED=1 bash "$0" "$@"
+fi
+
 echo "==> [2/9] Activating Node virtual environment..."
 # cPanel's own activate script references CL_VIRTUAL_ENV without a default
 # before assigning it, which is fatal under `set -u`. Disable nounset just

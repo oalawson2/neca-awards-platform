@@ -60,6 +60,14 @@ if [ -z "${DEPLOY_SH_REEXECED:-}" ]; then
   exec env DEPLOY_SH_REEXECED=1 bash "$0" "$@"
 fi
 
+# Proves, from this run's own output, exactly what's actually executing —
+# not something to infer from log wording. $0 read fresh here (independent
+# of bash's own parse buffer) must match HEAD's deploy.sh; if it doesn't,
+# something other than a normal git pull is at play (e.g. a second deploy
+# mechanism — see README, .cpanel.yml is a documented-inactive fallback —
+# touching this file/directory too).
+echo "    Running $(readlink -f "$0" 2>/dev/null || echo "$0") @ $(git rev-parse --short HEAD 2>/dev/null || echo unknown), sha256 $(sha256sum "$0" 2>/dev/null | cut -d' ' -f1)"
+
 echo "==> [2/9] Activating Node virtual environment..."
 # cPanel's own activate script references CL_VIRTUAL_ENV without a default
 # before assigning it, which is fatal under `set -u`. Disable nounset just
@@ -141,6 +149,45 @@ echo "==> [7/9] Staging public/ and $BUILD_DIST_DIR/static into the new standalo
 mkdir -p "$BUILD_DIST_DIR/standalone/$BUILD_DIST_DIR"
 cp -R public "$BUILD_DIST_DIR/standalone/"
 cp -R "$BUILD_DIST_DIR/static" "$BUILD_DIST_DIR/standalone/$BUILD_DIST_DIR/"
+
+# Ground-truth self-check: an earlier version of this comment claimed the
+# check below was "reading the actual bytes on disk" when it was actually
+# just comparing two shell variables that are equal by construction
+# (server.js's baked distDir vs. $BUILD_DIST_DIR — both come from the same
+# $BUILD_DIST_DIR used for NEXT_DIST_DIR at build time, so they can only
+# disagree if something outside this script's own build step interfered).
+# That comparison is kept below as a cheap sanity check, but the real
+# verification is: does a static file actually exist where server.js will
+# look for it. `find` is run into a captured variable, not straight into
+# a pipeline, specifically because piping it directly into `sed` here
+# once caused this script to die silently under `pipefail` (find exits
+# non-zero when the directory doesn't exist, its own stderr had been
+# redirected to /dev/null, and set -e killed the script with no message
+# at all) — confirmed by deliberately reproducing a broken staging
+# destination and finding that exact silent-death behavior first.
+BAKED_DISTDIR="$(grep -o '"distDir":"[^"]*"' "$BUILD_DIST_DIR/standalone/server.js" | sed -E 's/"distDir":"\.\/?//; s/"$//')"
+if [ "$BAKED_DISTDIR" != "$BUILD_DIST_DIR" ]; then
+  echo "ERROR: server.js's baked distDir ('$BAKED_DISTDIR') doesn't match"
+  echo "  this run's own BUILD_DIST_DIR ('$BUILD_DIST_DIR') — something"
+  echo "  other than this script's own build step wrote that server.js."
+  echo "  Live site is untouched. Not proceeding to the smoke test or swap."
+  exit 1
+fi
+STAGED_CSS="$(find "$BUILD_DIST_DIR/standalone/$BAKED_DISTDIR/static" -name "*.css" 2>/dev/null | head -1 || true)"
+if [ -z "$STAGED_CSS" ]; then
+  echo "ERROR: no .css file found under"
+  echo "  '$BUILD_DIST_DIR/standalone/$BAKED_DISTDIR/static' after staging —"
+  echo "  server.js (distDir '$BAKED_DISTDIR') will 404 on every static"
+  echo "  asset. Live site is untouched. Not proceeding to the smoke test"
+  echo "  or swap. Check what's actually in $BUILD_DIST_DIR/standalone/ —"
+  echo "  a second deploy mechanism touching this directory concurrently"
+  echo "  (cPanel's own Git Version Control auto-deploy, if enabled — see"
+  echo "  README, .cpanel.yml is a documented-inactive fallback, not kept"
+  echo "  in sync with this script) is the leading suspect if the staging"
+  echo "  commands above look correct but this still fires."
+  exit 1
+fi
+echo "    On-disk confirmation — server.js expects distDir '$BAKED_DISTDIR', found $STAGED_CSS"
 
 echo "==> [8/9] Smoke-testing the new build before it ever touches the live site..."
 # Boots the freshly-built server.js standalone (outside Passenger, on a

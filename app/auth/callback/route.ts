@@ -14,9 +14,24 @@ import { createClient } from "@/lib/supabase/server";
  * else (a bare protocol-relative `//host/...`, or a full external URL)
  * falls back to the default, so this can't be turned into an open
  * redirect via a crafted email link.
+ *
+ * The redirect target's origin deliberately comes from
+ * NEXT_PUBLIC_SITE_URL (same as requestPasswordReset's own redirectTo,
+ * in lib/auth/actions.ts), NOT from `new URL(request.url).origin`.
+ * Behind this app's LiteSpeed/Passenger deployment, a route handler's
+ * request.url is only built from the incoming Host header when Next's
+ * experimental.trustHostHeader is true (it isn't, here) — otherwise Next
+ * builds it from the server's own listen hostname, which next.config.ts
+ * and deploy.sh deliberately force to the literal string '0.0.0.0' (see
+ * the HOSTNAME-bind fix elsewhere in this repo's history) so Passenger
+ * can reach it on every interface. That's the right fix for binding, but
+ * it means request.url's origin here was never the public site — it was
+ * "https://0.0.0.0:<port>", producing a browser-level ERR_ADDRESS_INVALID
+ * instead of a normal "link expired" page for every reset-link click.
  */
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
+  const origin = process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin;
+  const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
   const rawNext = searchParams.get("next") ?? "/reset-password";
   const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/reset-password";

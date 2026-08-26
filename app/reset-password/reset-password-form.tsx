@@ -29,6 +29,17 @@ export function ResetPasswordForm() {
         setError(updateError.message);
         return;
       }
+      // The recovery session /auth/callback established to get this far is
+      // a real, full session — proxy.ts's role-gated routing doesn't (and
+      // shouldn't) distinguish it from a normal one, since a stolen/shared
+      // reset link is exactly the case that check exists for elsewhere.
+      // Without signing out here, landing on /login next would show the
+      // real form only by coincidence (an applicant's own profiles.role
+      // happens to match the /login route's checks); an existing user's
+      // still-active recovery session would instead get silently carried
+      // straight into their portal by that same proxy.ts rule, never
+      // having entered their new password anywhere the app asked for it.
+      await supabase.auth.signOut();
       setSuccess(true);
       setTimeout(() => {
         router.push("/login");

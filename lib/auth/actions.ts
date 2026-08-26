@@ -155,11 +155,40 @@ export async function signUpApplicant(input: SignUpInput): Promise<AuthResult> {
   // cleaner permanent home if one gets added.
   const termsAcceptedAt = new Date().toISOString();
 
+  // Without an explicit emailRedirectTo, Supabase falls back to whatever
+  // "Site URL" is configured in its own dashboard (Authentication -> URL
+  // Configuration) — a setting this codebase can't see or control, and
+  // which may not even point at /auth/callback. Set explicitly here for
+  // the same reason requestPasswordReset already does below: so this
+  // flow's confirmation link is guaranteed to exchange its code through
+  // this app's own /auth/callback (see that route for what happens once
+  // it lands there) rather than depend on external, out-of-repo config.
+  //
+  // next=/login, not /applicant/profile: confirming an email only proves
+  // the address is real, not that the person at the keyboard right now
+  // is the account owner — same reasoning as password reset, which lands
+  // on /reset-password (an actual form) rather than straight into the
+  // app. The session /auth/callback establishes here is real (cookies
+  // set, same as any other), but ensureProfile() — the only thing that
+  // ever creates this user's profiles row — is never called by
+  // /auth/callback, only by signIn() and by this function's own
+  // immediate-session branch below. proxy.ts's role-gated redirects
+  // (including the one that would otherwise bounce a signed-in user away
+  // from /login into their portal) all key off that profiles row, so a
+  // confirmation-only session with no row yet resolves to role=null and
+  // /login renders its real form — confirmed by reading proxy.ts's and
+  // getCurrentUser()'s full logic, both unconditional on this point, and
+  // by login-form.tsx itself, which only ever establishes a session by
+  // submitting real credentials through signIn(), never by reusing one.
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({
     email,
     password: input.password,
-    options: { data: { terms_accepted_at: termsAcceptedAt, terms_version: TERMS_VERSION } },
+    options: {
+      data: { terms_accepted_at: termsAcceptedAt, terms_version: TERMS_VERSION },
+      emailRedirectTo: `${siteUrl}/auth/callback?next=${encodeURIComponent("/login")}`,
+    },
   });
   if (error) {
     return { success: false, error: error.message };
